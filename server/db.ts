@@ -1,9 +1,8 @@
-import { Pool, neonConfig } from '@neondatabase/serverless';
-import { drizzle } from 'drizzle-orm/neon-serverless';
-import ws from "ws";
+import 'dotenv/config';
+import { Pool } from 'pg';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { sql } from 'drizzle-orm';
 import * as schema from "@shared/schema";
-
-neonConfig.webSocketConstructor = ws;
 
 if (!process.env.DATABASE_URL) {
   throw new Error(
@@ -13,3 +12,12 @@ if (!process.env.DATABASE_URL) {
 
 export const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 export const db = drizzle({ client: pool, schema });
+
+// Ensure pgcrypto extension for gen_random_uuid()
+(async () => {
+  try {
+    await db.execute(sql`CREATE EXTENSION IF NOT EXISTS "pgcrypto"`);
+  } catch (err) {
+    console.warn('Warning: failed to ensure pgcrypto extension:', err);
+  }
+})();

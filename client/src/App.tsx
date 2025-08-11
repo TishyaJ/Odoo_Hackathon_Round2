@@ -11,11 +11,11 @@ import Home from "@/pages/home";
 import Products from "@/pages/products";
 import AdminDashboard from "@/pages/admin-dashboard";
 import Bookings from "@/pages/bookings";
+import { GoogleOAuthProvider } from '@react-oauth/google';
 
 function Router() {
   const { isAuthenticated, isLoading } = useAuth();
   
-  // Show loading state
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -24,7 +24,6 @@ function Router() {
     );
   }
 
-  // Show login page if not authenticated
   if (!isAuthenticated) {
     return (
       <Switch>
@@ -35,7 +34,6 @@ function Router() {
     );
   }
 
-  // Show authenticated routes
   return (
     <Switch>
       <Route path="/" component={Home} />
@@ -48,11 +46,19 @@ function Router() {
 }
 
 function App() {
+  const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+
   return (
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <Router />
+        {googleClientId ? (
+          <GoogleOAuthProvider clientId={googleClientId}>
+            <Router />
+          </GoogleOAuthProvider>
+        ) : (
+          <Router />
+        )}
       </TooltipProvider>
     </QueryClientProvider>
   );

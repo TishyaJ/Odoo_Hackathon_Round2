@@ -4,40 +4,121 @@ import { storage } from "./storage";
 import { authenticateToken, requireAdmin, generateToken, hashPassword, comparePassword, type AuthRequest } from "./auth";
 import { loginSchema, registerSchema } from "@shared/schema";
 import Stripe from "stripe";
+import crypto from "crypto";
 
 if (!process.env.STRIPE_SECRET_KEY) {
   throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
 }
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-  apiVersion: "2023-10-16",
+  apiVersion: "2025-07-30.basil",
 });
 
+// Store OTPs temporarily (in production, use Redis or database)
+const otpStore = new Map();
+
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Auth routes
-  app.post('/api/auth/register', async (req, res) => {
+  // OTP-based Authentication Routes
+  
+  // Generate OTP for registration
+  app.post('/user/generate-otp', async (req, res) => {
     try {
-      const validatedData = registerSchema.parse(req.body);
+      const { email } = req.body;
       
-      // Check if user exists
-      const existingUser = await storage.getUserByEmail(validatedData.email);
-      if (existingUser) {
-        return res.status(400).json({ message: "User already exists" });
+      if (!email) {
+        return res.status(400).json({ error: "Email is required" });
       }
 
+      // Check if user already exists
+      const existingUser = await storage.getUserByEmail(email);
+      if (existingUser) {
+        return res.status(400).json({ error: "User already exists with this email" });
+      }
+
+      // Generate 6-digit OTP
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      
+      // Store OTP with expiration (5 minutes)
+      otpStore.set(email, {
+        otp,
+        expiresAt: Date.now() + 5 * 60 * 1000
+      });
+
+      // Log OTP to console for testing (instead of sending email)
+      console.log(`\n🔐 OTP for ${email}: ${otp}\n🔐 Use this code to complete registration\n`);
+      
+      res.status(200).json({ message: "OTP sent successfully" });
+    } catch (error) {
+      console.error("Generate OTP error:", error);
+      res.status(500).json({ error: "Failed to send OTP" });
+    }
+  });
+
+  // Generate OTP for login
+  app.post('/user/generate-otp-login', async (req, res) => {
+    try {
+      const { email } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ error: "Email is required" });
+      }
+
+      // Check if user exists
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        return res.status(404).json({ error: "User not found" });
+      }
+
+      // Generate 6-digit OTP
+      const otp = Math.floor(100000 + Math.random() * 900000).toString();
+      
+      // Store OTP with expiration (5 minutes)
+      otpStore.set(email, {
+        otp,
+        expiresAt: Date.now() + 5 * 60 * 1000
+      });
+
+      // Log OTP to console for testing (instead of sending email)
+      console.log(`\n🔐 OTP for ${email}: ${otp}\n🔐 Use this code to complete login\n`);
+      
+      res.status(200).json({ message: "OTP sent successfully" });
+    } catch (error) {
+      console.error("Generate OTP login error:", error);
+      res.status(500).json({ error: "Failed to send OTP" });
+    }
+  });
+
+  // Verify OTP and create user (registration)
+  app.post('/user/verify-otp', async (req, res) => {
+    try {
+      const { name, email, password, otp } = req.body;
+      
+      if (!email || !otp || !password || !name) {
+        return res.status(400).json({ error: "All fields are required" });
+      }
+
+      // Verify OTP
+      const storedOTP = otpStore.get(email);
+      if (!storedOTP || storedOTP.otp !== otp || Date.now() > storedOTP.expiresAt) {
+        return res.status(400).json({ error: "Invalid or expired OTP" });
+      }
+
+      // Clear OTP after successful verification
+      otpStore.delete(email);
+
       // Hash password and create user
-      const hashedPassword = await hashPassword(validatedData.password);
+      const hashedPassword = await hashPassword(password);
       const user = await storage.createUser({
-        email: validatedData.email,
+        email,
         password: hashedPassword,
-        firstName: validatedData.firstName,
-        lastName: validatedData.lastName,
-        customerType: validatedData.customerType,
+        firstName: name.firstname,
+        lastName: name.lastname,
+        customerType: 'lister', // Default to lister
       });
 
       // Generate token
       const token = generateToken(user.id);
       
-      res.json({
+      res.status(201).json({
         token,
         user: {
           id: user.id,
@@ -49,31 +130,80 @@ export async function registerRoutes(app: Express): Promise<Server> {
         }
       });
     } catch (error) {
-      console.error("Registration error:", error);
-      res.status(400).json({ message: "Registration failed" });
+      console.error("Verify OTP error:", error);
+      res.status(500).json({ error: "Registration failed" });
     }
   });
 
-  app.post('/api/auth/login', async (req, res) => {
+  // Verify OTP and login
+  app.post('/user/verify-otp-login', async (req, res) => {
     try {
-      const validatedData = loginSchema.parse(req.body);
+      const { email, otp } = req.body;
       
-      // Find user
-      const user = await storage.getUserByEmail(validatedData.email);
-      if (!user || !user.isActive) {
-        return res.status(401).json({ message: "Invalid credentials" });
+      if (!email || !otp) {
+        return res.status(400).json({ error: "Email and OTP are required" });
       }
 
-      // Check password
-      const isValidPassword = await comparePassword(validatedData.password, user.password);
-      if (!isValidPassword) {
-        return res.status(401).json({ message: "Invalid credentials" });
+      // Verify OTP
+      const storedOTP = otpStore.get(email);
+      if (!storedOTP || storedOTP.otp !== otp || Date.now() > storedOTP.expiresAt) {
+        return res.status(400).json({ error: "Invalid or expired OTP" });
+      }
+
+      // Clear OTP after successful verification
+      otpStore.delete(email);
+
+      // Find user
+      const user = await storage.getUserByEmail(email);
+      if (!user || !user.isActive) {
+        return res.status(401).json({ error: "User not found or inactive" });
       }
 
       // Generate token
       const token = generateToken(user.id);
       
-      res.json({
+      res.status(200).json({
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role,
+          customerType: user.customerType
+        }
+      });
+    } catch (error) {
+      console.error("Verify OTP login error:", error);
+      res.status(500).json({ error: "Login failed" });
+    }
+  });
+
+  // Traditional login (fallback)
+  app.post('/user/login', async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      
+      if (!email || !password) {
+        return res.status(400).json({ error: "Email and password are required" });
+      }
+
+      // Find user
+      const user = await storage.getUserByEmail(email);
+      if (!user || !user.isActive) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+
+      // Check password
+      const isValidPassword = await comparePassword(password, user.password);
+      if (!isValidPassword) {
+        return res.status(401).json({ error: "Invalid credentials" });
+      }
+
+      // Generate token
+      const token = generateToken(user.id);
+      
+      res.status(200).json({
         token,
         user: {
           id: user.id,
@@ -86,15 +216,91 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error("Login error:", error);
-      res.status(400).json({ message: "Login failed" });
+      res.status(500).json({ error: "Login failed" });
     }
   });
 
-  app.get('/api/auth/user', authenticateToken, async (req: AuthRequest, res) => {
+  // Google OAuth callback
+  app.post('/auth/google', async (req, res) => {
+    try {
+      const { code } = req.body as { code?: string };
+      if (!code) return res.status(400).json({ error: 'Authorization code is required' });
+      if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+        return res.status(500).json({ error: 'Google OAuth not configured' });
+      }
+
+      // Exchange code for tokens
+      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          code,
+          client_id: process.env.GOOGLE_CLIENT_ID,
+          client_secret: process.env.GOOGLE_CLIENT_SECRET,
+          grant_type: 'authorization_code',
+          redirect_uri: 'postmessage',
+        }),
+      });
+
+      if (!tokenRes.ok) {
+        const text = await tokenRes.text();
+        return res.status(400).json({ error: 'Failed to exchange code', details: text });
+      }
+
+      const tokenJson = await tokenRes.json() as { access_token: string };
+
+      // Fetch user info
+      const userInfoRes = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+        headers: { Authorization: `Bearer ${tokenJson.access_token}` },
+      });
+      if (!userInfoRes.ok) {
+        const text = await userInfoRes.text();
+        return res.status(400).json({ error: 'Failed to fetch user info', details: text });
+      }
+      const userInfo = await userInfoRes.json() as { email: string; given_name?: string; family_name?: string; sub: string; picture?: string };
+
+      if (!userInfo.email) {
+        return res.status(400).json({ error: 'Google did not provide an email' });
+      }
+
+      // Find or create user
+      let user = await storage.getUserByEmail(userInfo.email);
+      if (!user) {
+        user = await storage.createUser({
+          email: userInfo.email,
+          password: await hashPassword(crypto.randomUUID()),
+          firstName: userInfo.given_name || 'Google',
+          lastName: userInfo.family_name || 'User',
+          customerType: 'renter',
+          profileImageUrl: userInfo.picture,
+        });
+      }
+
+      const token = generateToken(user.id);
+      return res.status(201).json({
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role,
+          customerType: user.customerType,
+          profileImageUrl: user.profileImageUrl,
+        },
+      });
+    } catch (error) {
+      console.error('Google auth error:', error);
+      res.status(500).json({ error: 'Google authentication failed' });
+    }
+  });
+
+  // Get current user
+  app.get('/user', authenticateToken, async (req: AuthRequest, res) => {
     try {
       const user = await storage.getUser(req.user!.id);
       if (!user) {
-        return res.status(404).json({ message: "User not found" });
+        return res.status(404).json({ error: "User not found" });
       }
 
       res.json({
@@ -107,8 +313,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     } catch (error) {
       console.error("Get user error:", error);
-      res.status(500).json({ message: "Failed to fetch user" });
+      res.status(500).json({ error: "Failed to fetch user" });
     }
+  });
+
+  // Logout
+  app.get('/user/logout', (req, res) => {
+    // In a real app, you might want to blacklist the token
+    res.json({ message: "Logged out successfully" });
   });
 
   // Categories routes
@@ -311,6 +523,109 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res
         .status(500)
         .json({ message: "Error creating payment intent: " + error.message });
+    }
+  });
+
+  // Compatibility routes for existing client
+  // Register with email/password (no OTP)
+  app.post('/api/auth/register', async (req, res) => {
+    try {
+      const validated = registerSchema.parse(req.body);
+
+      const existingUser = await storage.getUserByEmail(validated.email);
+      if (existingUser) {
+        return res.status(400).json({ message: 'User already exists' });
+      }
+
+      const hashedPassword = await hashPassword(validated.password);
+      const user = await storage.createUser({
+        email: validated.email,
+        password: hashedPassword,
+        firstName: validated.firstName,
+        lastName: validated.lastName,
+        customerType: validated.customerType,
+      });
+
+      const token = generateToken(user.id);
+      res.json({
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role,
+          customerType: user.customerType,
+        },
+      });
+    } catch (error: any) {
+      console.error('Registration error:', error);
+      // Zod validation error
+      if (error?.issues?.length) {
+        return res.status(400).json({ message: error.issues[0]?.message || 'Invalid input' });
+      }
+      // Unique violation (duplicate email)
+      if (error?.code === '23505') {
+        return res.status(400).json({ message: 'User already exists' });
+      }
+      return res.status(400).json({ message: 'Registration failed' });
+    }
+  });
+
+  // Login with email/password
+  app.post('/api/auth/login', async (req, res) => {
+    try {
+      const validated = loginSchema.parse(req.body);
+
+      const user = await storage.getUserByEmail(validated.email);
+      if (!user || !user.isActive) {
+        return res.status(401).json({ message: 'Invalid credentials' });
+      }
+
+      const isValid = await comparePassword(validated.password, user.password);
+      if (!isValid) {
+        return res.status(401).json({ message: 'Invalid credentials' });
+      }
+
+      const token = generateToken(user.id);
+      res.json({
+        token,
+        user: {
+          id: user.id,
+          email: user.email,
+          firstName: user.firstName,
+          lastName: user.lastName,
+          role: user.role,
+          customerType: user.customerType,
+        },
+      });
+    } catch (error: any) {
+      console.error('Login error:', error);
+      if (error?.issues?.length) {
+        return res.status(400).json({ message: error.issues[0]?.message || 'Invalid input' });
+      }
+      return res.status(400).json({ message: 'Login failed' });
+    }
+  });
+
+  // Current user
+  app.get('/api/auth/user', authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const user = await storage.getUser(req.user!.id);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+      res.json({
+        id: user.id,
+        email: user.email,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        role: user.role,
+        customerType: user.customerType,
+      });
+    } catch (error) {
+      console.error('Get user error:', error);
+      res.status(500).json({ message: 'Failed to fetch user' });
     }
   });
 
