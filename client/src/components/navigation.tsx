@@ -36,6 +36,11 @@ export default function Navigation() {
               <Link href="/products">
                 <Button variant={location === "/products" ? "default" : "ghost"} size="sm">Products</Button>
               </Link>
+              <Link href="/add-item">
+                <Button variant={location === "/add-item" ? "default" : "ghost"} size="sm" className="bg-rental-primary hover:bg-blue-700 text-white">
+                  + Add Item
+                </Button>
+              </Link>
               <Link href="/bookings">
                 <Button variant={location === "/bookings" ? "default" : "ghost"} size="sm">My Bookings</Button>
               </Link>

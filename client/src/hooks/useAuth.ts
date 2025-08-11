@@ -8,10 +8,9 @@ export function useAuth() {
   const { data: user, isLoading } = useQuery<User>({
     queryKey: ["/api/auth/user"],
     queryFn: async () => {
-      if (!token) return null;
-      
+      if (!token) return null as any;
       const response = await apiRequest("GET", "/api/auth/user");
-      if (!response.ok) return null;
+      if (!response.ok) return null as any;
       return response.json();
     },
     retry: false,
@@ -20,7 +19,8 @@ export function useAuth() {
 
   const login = (token: string) => {
     localStorage.setItem('authToken', token);
-    window.location.reload();
+    setUser(null); // Reset user to trigger refetch
+    window.location.href = '/';
   };
 
   const logout = () => {

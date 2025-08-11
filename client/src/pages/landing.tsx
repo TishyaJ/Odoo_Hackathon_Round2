@@ -15,33 +15,16 @@ export default function Landing() {
               </div>
               <span className="text-xl font-bold text-gray-900">RentalPro</span>
             </div>
-            <Button 
-              onClick={() => window.location.href = '/api/login'}
-              className="bg-rental-primary hover:bg-blue-700"
-            >
-              Sign In
-            </Button>
+            <Button onClick={() => window.location.href = '/login'} className="bg-rental-primary hover:bg-blue-700">Sign In</Button>
           </div>
         </div>
       </nav>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
         <div className="text-center mb-16">
-          <h1 className="text-4xl md:text-6xl font-bold text-gray-900 mb-6">
-            The Smart Way to
-            <span className="bg-gradient-to-r from-rental-primary to-rental-secondary bg-clip-text text-transparent"> Rent & Share</span>
-          </h1>
-          <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">
-            Earn money from your unused items or find exactly what you need for any project. 
-            Join thousands of users saving money and reducing waste.
-          </p>
-          <Button 
-            size="lg"
-            onClick={() => window.location.href = '/api/login'}
-            className="bg-rental-primary hover:bg-blue-700 text-lg px-8 py-3"
-          >
-            Get Started Today
-          </Button>
+          <h1 className="text-4xl md:text-6xl font-bold text-gray-900 mb-6">The Smart Way to<span className="bg-gradient-to-r from-rental-primary to-rental-secondary bg-clip-text text-transparent"> Rent & Share</span></h1>
+          <p className="text-xl text-gray-600 mb-8 max-w-3xl mx-auto">Earn money from your unused items or find exactly what you need for any project. Join thousands of users saving money and reducing waste.</p>
+          <Button size="lg" onClick={() => window.location.href = '/login'} className="bg-rental-primary hover:bg-blue-700 text-lg px-8 py-3">Get Started Today</Button>
         </div>
 
         <div className="grid md:grid-cols-2 gap-8 mb-16">

@@ -76,21 +76,11 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
     },
     onError: (error) => {
       if (isUnauthorizedError(error as Error)) {
-        toast({
-          title: "Unauthorized",
-          description: "You are logged out. Logging in again...",
-          variant: "destructive",
-        });
-        setTimeout(() => {
-          window.location.href = "/api/login";
-        }, 500);
+        toast({ title: "Unauthorized", description: "You are logged out. Logging in again...", variant: "destructive" });
+        setTimeout(() => { window.location.href = "/login"; }, 300);
         return;
       }
-      toast({
-        title: "Booking Failed",
-        description: "Unable to create booking. Please try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Booking Failed", description: "Unable to create booking. Please try again.", variant: "destructive" });
     },
   });
 

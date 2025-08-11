@@ -5,6 +5,7 @@ import { authenticateToken, requireAdmin, generateToken, hashPassword, comparePa
 import { loginSchema, registerSchema } from "@shared/schema";
 import Stripe from "stripe";
 import crypto from "crypto";
+import sgMail from "@sendgrid/mail";
 
 if (!process.env.STRIPE_SECRET_KEY) {
   throw new Error('Missing required Stripe secret: STRIPE_SECRET_KEY');
@@ -12,6 +13,57 @@ if (!process.env.STRIPE_SECRET_KEY) {
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: "2025-07-30.basil",
 });
+
+// Configure SendGrid
+if (process.env.SENDGRID_API_KEY) {
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+}
+
+// Email utility functions
+const sendEmail = async (to: string, subject: string, html: string) => {
+  if (!process.env.SENDGRID_API_KEY) {
+    console.log('📧 Email would be sent (SendGrid not configured):', { to, subject });
+    return;
+  }
+
+  try {
+    const msg = {
+      to,
+      from: process.env.SENDGRID_FROM_EMAIL || 'noreply@rentalpro.com',
+      subject,
+      html,
+    };
+    await sgMail.send(msg);
+    console.log('📧 Email sent successfully to:', to);
+  } catch (error) {
+    console.error('📧 Email sending failed:', error);
+  }
+};
+
+const generateInvoiceEmail = (booking: any, product: any, user: any) => {
+  const totalAmount = parseFloat(booking.totalAmount).toFixed(2);
+  const startDate = new Date(booking.startDate).toLocaleDateString();
+  const endDate = new Date(booking.endDate).toLocaleDateString();
+  
+  return `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+      <h2 style="color: #2563eb;">RentalPro - Booking Invoice</h2>
+      <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0;">
+        <h3>Booking Details</h3>
+        <p><strong>Booking ID:</strong> ${booking.id}</p>
+        <p><strong>Product:</strong> ${product.name}</p>
+        <p><strong>Rental Period:</strong> ${startDate} - ${endDate}</p>
+        <p><strong>Quantity:</strong> ${booking.quantity}</p>
+        <p><strong>Duration Type:</strong> ${booking.durationType}</p>
+        <p><strong>Base Price:</strong> $${parseFloat(booking.basePrice).toFixed(2)}</p>
+        <p><strong>Discount:</strong> $${parseFloat(booking.discount || 0).toFixed(2)}</p>
+        <p><strong>Service Fee:</strong> $${parseFloat(booking.serviceFee || 0).toFixed(2)}</p>
+        <p><strong>Total Amount:</strong> $${totalAmount}</p>
+      </div>
+      <p>Thank you for using RentalPro!</p>
+    </div>
+  `;
+};
 
 // Store OTPs temporarily (in production, use Redis or database)
 const otpStore = new Map();
@@ -348,7 +400,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       };
 
       const products = await storage.getProducts(filters);
-      res.json(products);
+      
+      // Get pricing for each product
+      const productsWithPricing = await Promise.all(
+        products.map(async (product) => {
+          const pricing = await storage.getProductPricing(product.id);
+          return {
+            ...product,
+            pricing,
+          };
+        })
+      );
+      
+      res.json(productsWithPricing);
     } catch (error) {
       console.error("Get products error:", error);
       res.status(500).json({ message: "Failed to fetch products" });
@@ -361,7 +425,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!product) {
         return res.status(404).json({ message: "Product not found" });
       }
-      res.json(product);
+      
+      // Get pricing information
+      const pricing = await storage.getProductPricing(product.id);
+      
+      // Get late fees information
+      const lateFeesConfig = await storage.getBusinessConfig(`product_${product.id}_late_fees`);
+      const lateFees = lateFeesConfig.length > 0 ? JSON.parse(lateFeesConfig[0].value) : null;
+      
+      res.json({
+        ...product,
+        pricing,
+        lateFees,
+      });
     } catch (error) {
       console.error("Get product error:", error);
       res.status(500).json({ message: "Failed to fetch product" });
@@ -370,8 +446,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/products', authenticateToken, async (req: AuthRequest, res) => {
     try {
-      const productData = { ...req.body, ownerId: req.user!.id };
-      const product = await storage.createProduct(productData);
+      const { pricing, lateFees, ...productData } = req.body;
+      const product = await storage.createProduct({ ...productData, ownerId: req.user!.id });
+      
+      // Create pricing records
+      if (pricing && Array.isArray(pricing)) {
+        for (const priceOption of pricing) {
+          await storage.createProductPricing({
+            productId: product.id,
+            durationType: priceOption.durationType,
+            basePrice: priceOption.basePrice,
+            discountPercentage: priceOption.discountPercentage || 0,
+            isActive: true,
+          });
+        }
+      }
+      
+      // Store late fees information in business config
+      if (lateFees && lateFees.dailyRate) {
+        await storage.updateBusinessConfig(`product_${product.id}_late_fees`, JSON.stringify(lateFees));
+      }
+      
       res.json(product);
     } catch (error) {
       console.error("Create product error:", error);
@@ -412,6 +507,49 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const bookingData = { ...req.body, customerId: req.user!.id };
       const booking = await storage.createBooking(bookingData);
+      
+      // Send email notifications
+      try {
+        const product = await storage.getProduct(booking.productId);
+        const customer = await storage.getUser(booking.customerId);
+        const owner = product ? await storage.getUser(product.ownerId) : null;
+        
+        if (customer && product) {
+          // Send invoice to customer
+          const customerEmail = generateInvoiceEmail(booking, product, customer);
+          await sendEmail(
+            customer.email,
+            `RentalPro - Booking Confirmation #${booking.id.slice(-8)}`,
+            customerEmail
+          );
+          
+          // Send notification to product owner
+          if (owner && owner.email !== customer.email) {
+            const ownerEmail = `
+              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                <h2 style="color: #2563eb;">RentalPro - New Booking</h2>
+                <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                  <h3>New Booking for ${product.name}</h3>
+                  <p><strong>Booking ID:</strong> ${booking.id}</p>
+                  <p><strong>Customer:</strong> ${customer.firstName} ${customer.lastName}</p>
+                  <p><strong>Rental Period:</strong> ${new Date(booking.startDate).toLocaleDateString()} - ${new Date(booking.endDate).toLocaleDateString()}</p>
+                  <p><strong>Total Amount:</strong> $${parseFloat(booking.totalAmount).toFixed(2)}</p>
+                </div>
+                <p>Please review and confirm this booking.</p>
+              </div>
+            `;
+            await sendEmail(
+              owner.email,
+              `RentalPro - New Booking for ${product.name}`,
+              ownerEmail
+            );
+          }
+        }
+      } catch (emailError) {
+        console.error("Email notification error:", emailError);
+        // Don't fail the booking creation if email fails
+      }
+      
       res.json(booking);
     } catch (error) {
       console.error("Create booking error:", error);
@@ -493,7 +631,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { timestamp, public_id, folder } = req.body;
       
-      const signature = require('crypto')
+      const signature = crypto
         .createHash('sha256')
         .update(`folder=${folder}&public_id=${public_id}&timestamp=${timestamp}${process.env.CLOUDINARY_API_SECRET}`)
         .digest('hex');

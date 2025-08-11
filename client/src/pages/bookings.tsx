@@ -30,7 +30,7 @@ export default function Bookings() {
     }
   }, [user, isLoading, toast]);
 
-  const { data: bookings = [] } = useQuery<any[]>({
+  const { data: bookings = [], error: bookingsError } = useQuery<any[]>({
     queryKey: ["/api/bookings", filters],
     queryFn: ({ queryKey }) => {
       const [url, filterParams] = queryKey as [string, typeof filters];
@@ -39,10 +39,17 @@ export default function Bookings() {
         if (!value || value === 'all') return;
         searchParams.append(key, value as string);
       });
-      return fetch(`${url}?${searchParams}`).then(res => res.json());
+      return fetch(`${url}?${searchParams}`).then(res => {
+        if (!res.ok) {
+          throw new Error(`HTTP error! status: ${res.status}`);
+        }
+        return res.json();
+      });
     },
     retry: false,
   });
+
+
 
   const { data: products = [] } = useQuery<any[]>({
     queryKey: ["/api/products"],
@@ -91,13 +98,13 @@ export default function Bookings() {
     setFilters(prev => ({ ...prev, [key]: value }));
   };
 
-  const filteredBookings = bookings?.filter((booking: any) => {
+  const filteredBookings = Array.isArray(bookings) ? bookings.filter((booking: any) => {
     const matchesSearch = !searchQuery || 
       booking.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       booking.productId.toLowerCase().includes(searchQuery.toLowerCase());
     
     return matchesSearch;
-  }) || [];
+  }) : [];
 
   const groupedBookings = {
     active: filteredBookings.filter((b: any) => ['confirmed', 'active'].includes(b.status)),

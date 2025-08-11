@@ -49,6 +49,12 @@ export default function Products() {
     retry: false,
   });
 
+  // Debug logging
+  console.log('User:', user);
+  console.log('User customerType:', user?.customerType);
+  console.log('Should show Add Product:', user?.customerType === 'lister');
+
+
   const { data: products = [], refetch: refetchProducts } = useQuery<any[]>({
     queryKey: ["/api/products", filters],
     queryFn: ({ queryKey }) => {
@@ -97,7 +103,7 @@ export default function Products() {
               <h1 className="text-3xl font-bold text-gray-900 mb-2">Browse & Rent Items</h1>
               <p className="text-gray-600">Discover thousands of items available for rent</p>
             </div>
-            {user?.customerType === 'lister' && (
+            {(user?.customerType === 'lister' || !user?.customerType) && (
               <Dialog open={showAddProductModal} onOpenChange={setShowAddProductModal}>
                 <DialogTrigger asChild>
                   <Button className="bg-rental-primary hover:bg-blue-700">
@@ -213,7 +219,7 @@ export default function Products() {
                   : "Be the first to add a product to the marketplace!"
                 }
               </p>
-              {user?.customerType === 'lister' && (
+              {(user?.customerType === 'lister' || !user?.customerType) && (
                 <Button onClick={() => setShowAddProductModal(true)} className="bg-rental-primary hover:bg-blue-700">
                   Add Your First Product
                 </Button>

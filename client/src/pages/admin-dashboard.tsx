@@ -21,14 +21,8 @@ export default function AdminDashboard() {
   // Redirect if not authenticated or not admin
   useEffect(() => {
     if (!isLoading && (!user || user.role !== 'admin')) {
-      toast({
-        title: "Unauthorized",
-        description: "Admin access required. Redirecting...",
-        variant: "destructive",
-      });
-      setTimeout(() => {
-        window.location.href = "/api/login";
-      }, 500);
+      toast({ title: "Unauthorized", description: "Admin access required. Redirecting...", variant: "destructive" });
+      setTimeout(() => { window.location.href = "/login"; }, 300);
       return;
     }
   }, [user, isLoading, toast]);
@@ -73,21 +67,11 @@ export default function AdminDashboard() {
     },
     onError: (error) => {
       if (isUnauthorizedError(error as Error)) {
-        toast({
-          title: "Unauthorized",
-          description: "You are logged out. Logging in again...",
-          variant: "destructive",
-        });
-        setTimeout(() => {
-          window.location.href = "/api/login";
-        }, 500);
+        toast({ title: "Unauthorized", description: "You are logged out. Logging in again...", variant: "destructive" });
+        setTimeout(() => { window.location.href = "/login"; }, 300);
         return;
       }
-      toast({
-        title: "Error",
-        description: "Failed to update booking status",
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: "Failed to update booking status", variant: "destructive" });
     },
   });
 

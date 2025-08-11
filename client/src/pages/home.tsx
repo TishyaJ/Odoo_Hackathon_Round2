@@ -46,7 +46,7 @@ export default function Home() {
 
   // We do not depend on PATCH /api/auth/user here to reduce coupling
   const handleNavigateToListItems = async () => {
-    setLocation("/products");
+    setLocation("/add-item");
   };
 
   const handleNavigateToRentItems = async () => {
