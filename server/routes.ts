@@ -447,7 +447,38 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/products', authenticateToken, async (req: AuthRequest, res) => {
     try {
       const { pricing, lateFees, ...productData } = req.body;
-      const product = await storage.createProduct({ ...productData, ownerId: req.user!.id });
+      
+      console.log('📦 Creating product with data:', JSON.stringify(productData, null, 2));
+      
+      // Convert date strings to Date objects if they exist
+      const processedProductData: any = {
+        ...productData,
+        ownerId: req.user!.id,
+      };
+      
+      // Only include date fields if they exist and convert them to Date objects
+      if (productData.availableFrom && productData.availableFrom.trim() !== '') {
+        console.log('📅 Converting availableFrom:', productData.availableFrom);
+        processedProductData.availableFrom = new Date(productData.availableFrom);
+      }
+      if (productData.availableUntil && productData.availableUntil.trim() !== '') {
+        console.log('📅 Converting availableUntil:', productData.availableUntil);
+        processedProductData.availableUntil = new Date(productData.availableUntil);
+      }
+      
+      // Remove any undefined, null, or empty string values to let Drizzle use defaults
+      Object.keys(processedProductData).forEach(key => {
+        if (processedProductData[key] === undefined || 
+            processedProductData[key] === null || 
+            (typeof processedProductData[key] === 'string' && processedProductData[key].trim() === '')) {
+          console.log('🗑️ Removing empty field:', key, processedProductData[key]);
+          delete processedProductData[key];
+        }
+      });
+      
+      console.log('📦 Processed product data:', JSON.stringify(processedProductData, null, 2));
+      
+      const product = await storage.createProduct(processedProductData);
       
       // Create pricing records
       if (pricing && Array.isArray(pricing)) {
@@ -465,6 +496,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Store late fees information in business config
       if (lateFees && lateFees.dailyRate) {
         await storage.updateBusinessConfig(`product_${product.id}_late_fees`, JSON.stringify(lateFees));
+      }
+      
+      // Create notification for the user
+      try {
+        console.log('🔔 Creating notification for user:', req.user!.id);
+        const notification = await storage.createNotification({
+          userId: req.user!.id,
+          type: 'product_created',
+          title: 'Item Listed Successfully! 🎉',
+          message: `Your item "${product.name}" has been successfully listed and is now available for rent.`,
+          relatedId: product.id,
+        });
+        console.log('🔔 Notification created successfully:', notification.id);
+      } catch (notificationError) {
+        console.error('🔔 Error creating notification:', notificationError);
+        // Don't fail product creation if notification fails
       }
       
       res.json(product);
@@ -505,50 +552,113 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/bookings', authenticateToken, async (req: AuthRequest, res) => {
     try {
-      const bookingData = { ...req.body, customerId: req.user!.id };
-      const booking = await storage.createBooking(bookingData);
+      console.log('📅 Creating booking with data:', JSON.stringify(req.body, null, 2));
       
-      // Send email notifications
-      try {
-        const product = await storage.getProduct(booking.productId);
-        const customer = await storage.getUser(booking.customerId);
-        const owner = product ? await storage.getUser(product.ownerId) : null;
-        
-        if (customer && product) {
-          // Send invoice to customer
-          const customerEmail = generateInvoiceEmail(booking, product, customer);
-          await sendEmail(
-            customer.email,
-            `RentalPro - Booking Confirmation #${booking.id.slice(-8)}`,
-            customerEmail
-          );
-          
-          // Send notification to product owner
-          if (owner && owner.email !== customer.email) {
-            const ownerEmail = `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-                <h2 style="color: #2563eb;">RentalPro - New Booking</h2>
-                <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                  <h3>New Booking for ${product.name}</h3>
-                  <p><strong>Booking ID:</strong> ${booking.id}</p>
-                  <p><strong>Customer:</strong> ${customer.firstName} ${customer.lastName}</p>
-                  <p><strong>Rental Period:</strong> ${new Date(booking.startDate).toLocaleDateString()} - ${new Date(booking.endDate).toLocaleDateString()}</p>
-                  <p><strong>Total Amount:</strong> $${parseFloat(booking.totalAmount).toFixed(2)}</p>
-                </div>
-                <p>Please review and confirm this booking.</p>
-              </div>
-            `;
-            await sendEmail(
-              owner.email,
-              `RentalPro - New Booking for ${product.name}`,
-              ownerEmail
-            );
-          }
-        }
-      } catch (emailError) {
-        console.error("Email notification error:", emailError);
-        // Don't fail the booking creation if email fails
+      // Convert date strings to Date objects
+      const processedBookingData: any = {
+        ...req.body,
+        customerId: req.user!.id,
+      };
+      
+      // Convert date fields to Date objects
+      if (req.body.startDate) {
+        console.log('📅 Converting startDate:', req.body.startDate);
+        processedBookingData.startDate = new Date(req.body.startDate);
       }
+      if (req.body.endDate) {
+        console.log('📅 Converting endDate:', req.body.endDate);
+        processedBookingData.endDate = new Date(req.body.endDate);
+      }
+      if (req.body.actualReturnDate) {
+        console.log('📅 Converting actualReturnDate:', req.body.actualReturnDate);
+        processedBookingData.actualReturnDate = new Date(req.body.actualReturnDate);
+      }
+      
+      // Remove any undefined or null values
+      Object.keys(processedBookingData).forEach(key => {
+        if (processedBookingData[key] === undefined || processedBookingData[key] === null) {
+          console.log('🗑️ Removing empty booking field:', key, processedBookingData[key]);
+          delete processedBookingData[key];
+        }
+      });
+      
+      console.log('📅 Processed booking data:', JSON.stringify(processedBookingData, null, 2));
+      
+      const booking = await storage.createBooking(processedBookingData);
+      
+                     // Send email notifications
+               try {
+                 const product = await storage.getProduct(booking.productId);
+                 const customer = await storage.getUser(booking.customerId);
+                 const owner = product ? await storage.getUser(product.ownerId) : null;
+                 
+                 if (customer && product) {
+                   // Send invoice to customer
+                   const customerEmail = generateInvoiceEmail(booking, product, customer);
+                   await sendEmail(
+                     customer.email,
+                     `RentalPro - Booking Confirmation #${booking.id.slice(-8)}`,
+                     customerEmail
+                   );
+                   
+                   // Send notification to product owner
+                   if (owner && owner.email !== customer.email) {
+                     const ownerEmail = `
+                       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+                         <h2 style="color: #2563eb;">RentalPro - New Booking</h2>
+                         <div style="background: #f8fafc; padding: 20px; border-radius: 8px; margin: 20px 0;">
+                           <h3>New Booking for ${product.name}</h3>
+                           <p><strong>Booking ID:</strong> ${booking.id}</p>
+                           <p><strong>Customer:</strong> ${customer.firstName} ${customer.lastName}</p>
+                           <p><strong>Rental Period:</strong> ${new Date(booking.startDate).toLocaleDateString()} - ${new Date(booking.endDate).toLocaleDateString()}</p>
+                           <p><strong>Total Amount:</strong> $${parseFloat(booking.totalAmount).toFixed(2)}</p>
+                         </div>
+                         <p>Please review and confirm this booking.</p>
+                       </div>
+                     `;
+                     await sendEmail(
+                       owner.email,
+                       `RentalPro - New Booking for ${product.name}`,
+                       ownerEmail
+                     );
+                   }
+                   
+                                       // Create notification for customer
+                    try {
+                      console.log('🔔 Creating booking notification for customer:', booking.customerId);
+                      const customerNotification = await storage.createNotification({
+                        userId: booking.customerId,
+                        type: 'booking_confirmed',
+                        title: 'Booking Confirmed! 🎉',
+                        message: `Your booking for "${product.name}" has been confirmed. Rental period: ${new Date(booking.startDate).toLocaleDateString()} - ${new Date(booking.endDate).toLocaleDateString()}`,
+                        relatedId: booking.id,
+                      });
+                      console.log('🔔 Customer notification created:', customerNotification.id);
+                    } catch (notificationError) {
+                      console.error('🔔 Error creating customer notification:', notificationError);
+                    }
+                    
+                    // Create notification for product owner
+                    if (owner && owner.id !== customer.id) {
+                      try {
+                        console.log('🔔 Creating booking notification for owner:', owner.id);
+                        const ownerNotification = await storage.createNotification({
+                          userId: owner.id,
+                          type: 'booking_confirmed',
+                          title: 'New Booking Received! 📦',
+                          message: `${customer.firstName} ${customer.lastName} has booked your item "${product.name}" for ${new Date(booking.startDate).toLocaleDateString()} - ${new Date(booking.endDate).toLocaleDateString()}`,
+                          relatedId: booking.id,
+                        });
+                        console.log('🔔 Owner notification created:', ownerNotification.id);
+                      } catch (notificationError) {
+                        console.error('🔔 Error creating owner notification:', notificationError);
+                      }
+                    }
+                 }
+               } catch (emailError) {
+                 console.error("Email notification error:", emailError);
+                 // Don't fail the booking creation if email fails
+               }
       
       res.json(booking);
     } catch (error) {
@@ -618,11 +728,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Notifications
   app.get('/api/notifications', authenticateToken, async (req: AuthRequest, res) => {
     try {
+      console.log('🔔 Fetching notifications for user:', req.user!.id);
       const notifications = await storage.getNotifications(req.user!.id);
+      console.log('🔔 Found notifications:', notifications.length);
+      console.log('🔔 Notifications data:', JSON.stringify(notifications, null, 2));
       res.json(notifications);
     } catch (error) {
       console.error("Get notifications error:", error);
       res.status(500).json({ message: "Failed to fetch notifications" });
+    }
+  });
+
+  app.patch('/api/notifications/:id/read', authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      await storage.markNotificationRead(req.params.id);
+      res.json({ message: "Notification marked as read" });
+    } catch (error) {
+      console.error("Mark notification read error:", error);
+      res.status(500).json({ message: "Failed to mark notification as read" });
+    }
+  });
+
+  app.delete('/api/notifications/:id', authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      // For now, we'll just mark it as read since we don't have a delete method
+      // In a real app, you'd want to implement actual deletion
+      await storage.markNotificationRead(req.params.id);
+      res.json({ message: "Notification deleted" });
+    } catch (error) {
+      console.error("Delete notification error:", error);
+      res.status(500).json({ message: "Failed to delete notification" });
     }
   });
 

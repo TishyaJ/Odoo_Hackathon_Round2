@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Navigation from "@/components/navigation";
 import { Calendar, Package, Search, Filter } from "lucide-react";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function Bookings() {
   const { user, isLoading } = useAuth();
@@ -32,19 +33,15 @@ export default function Bookings() {
 
   const { data: bookings = [], error: bookingsError } = useQuery<any[]>({
     queryKey: ["/api/bookings", filters],
-    queryFn: ({ queryKey }) => {
+    queryFn: async ({ queryKey }) => {
       const [url, filterParams] = queryKey as [string, typeof filters];
       const searchParams = new URLSearchParams();
       Object.entries(filterParams).forEach(([key, value]) => {
         if (!value || value === 'all') return;
         searchParams.append(key, value as string);
       });
-      return fetch(`${url}?${searchParams}`).then(res => {
-        if (!res.ok) {
-          throw new Error(`HTTP error! status: ${res.status}`);
-        }
-        return res.json();
-      });
+      const response = await apiRequest("GET", `${url}?${searchParams}`);
+      return response.json();
     },
     retry: false,
   });
@@ -53,6 +50,10 @@ export default function Bookings() {
 
   const { data: products = [] } = useQuery<any[]>({
     queryKey: ["/api/products"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/products");
+      return response.json();
+    },
     retry: false,
   });
 

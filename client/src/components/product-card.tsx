@@ -17,18 +17,50 @@ export default function ProductCard({ product, onClick }: ProductCardProps) {
     retry: false,
   });
 
+  const getAvailabilityStatus = () => {
+    const now = new Date();
+    const availableFrom = product.availableFrom ? new Date(product.availableFrom) : null;
+    const availableUntil = product.availableUntil ? new Date(product.availableUntil) : null;
+    
+    // If no dates are set, assume always available
+    if (!availableFrom && !availableUntil) {
+      return { status: 'available', color: 'bg-green-500 text-white', text: 'Available' };
+    }
+    
+    // Check if currently available
+    const isCurrentlyAvailable = (!availableFrom || now >= availableFrom) && 
+                                (!availableUntil || now <= availableUntil);
+    
+    if (isCurrentlyAvailable) {
+      return { status: 'available', color: 'bg-green-500 text-white', text: 'Available' };
+    }
+    
+    // Check if available in the future
+    if (availableFrom && now < availableFrom) {
+      const daysUntilAvailable = Math.ceil((availableFrom.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+      return { 
+        status: 'upcoming', 
+        color: 'bg-blue-500 text-white', 
+        text: `Available in ${daysUntilAvailable} day${daysUntilAvailable > 1 ? 's' : ''}` 
+      };
+    }
+    
+    // Past availability
+    return { status: 'unavailable', color: 'bg-gray-500 text-white', text: 'Not Available' };
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'available':
-        return 'bg-status-available text-white';
+        return 'bg-green-500 text-white';
       case 'rented':
-        return 'bg-status-rented text-white';
+        return 'bg-red-500 text-white';
       case 'returned':
-        return 'bg-status-returned text-white';
+        return 'bg-blue-500 text-white';
       case 'late':
-        return 'bg-status-late text-white';
+        return 'bg-orange-500 text-white';
       case 'reserved':
-        return 'bg-status-reserved text-white';
+        return 'bg-yellow-500 text-white';
       default:
         return 'bg-gray-500 text-white';
     }
@@ -57,10 +89,15 @@ export default function ProductCard({ product, onClick }: ProductCardProps) {
         
         {/* Status Badge */}
         <div className="absolute top-3 left-3">
-          <Badge className={getStatusColor('available')}>
-            <div className="w-2 h-2 rounded-full bg-current mr-1"></div>
-            Available
-          </Badge>
+          {(() => {
+            const availability = getAvailabilityStatus();
+            return (
+              <Badge className={availability.color}>
+                <div className="w-2 h-2 rounded-full bg-current mr-1"></div>
+                {availability.text}
+              </Badge>
+            );
+          })()}
         </div>
         
         {/* Favorite Button */}

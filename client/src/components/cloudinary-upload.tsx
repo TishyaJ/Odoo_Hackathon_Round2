@@ -27,6 +27,7 @@ export default function CloudinaryUpload({ onSuccess }: CloudinaryUploadProps) {
     description: '',
     categoryId: 'select-category',
     location: '',
+    quantity: 1,
     availableFrom: '',
     availableUntil: '',
   });
@@ -84,6 +85,7 @@ export default function CloudinaryUpload({ onSuccess }: CloudinaryUploadProps) {
       description: '',
       categoryId: 'select-category',
       location: '',
+      quantity: 1,
       availableFrom: '',
       availableUntil: '',
     });
@@ -208,7 +210,7 @@ export default function CloudinaryUpload({ onSuccess }: CloudinaryUploadProps) {
       case 1:
         return productForm.name.trim() && productForm.categoryId && productForm.categoryId !== 'select-category';
       case 2:
-        return productForm.location.trim() && Object.values(pricing).some(p => p.enabled && p.price);
+        return productForm.location.trim() && productForm.quantity > 0 && Object.values(pricing).some(p => p.enabled && p.price);
       case 3:
         return true; // Late fees are optional
       default:
@@ -396,6 +398,21 @@ export default function CloudinaryUpload({ onSuccess }: CloudinaryUploadProps) {
             className="pl-10"
             value={productForm.location}
             onChange={(e) => handleFormChange('location', e.target.value)}
+          />
+        </div>
+      </div>
+
+      <div>
+        <Label className="text-sm font-medium text-gray-700 mb-2">📦 Quantity Available (Required)</Label>
+        <div className="relative">
+          <Package className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" />
+          <Input
+            type="number"
+            min="1"
+            placeholder="1"
+            className="pl-10"
+            value={productForm.quantity}
+            onChange={(e) => handleFormChange('quantity', parseInt(e.target.value) || 1)}
           />
         </div>
       </div>

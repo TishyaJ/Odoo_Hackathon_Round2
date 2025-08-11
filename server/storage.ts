@@ -176,8 +176,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createProduct(product: InsertProduct): Promise<Product> {
-    const [newProduct] = await db.insert(products).values(product).returning();
-    return newProduct;
+    console.log('🗄️ Storage: Creating product with data:', JSON.stringify(product, null, 2));
+    try {
+      const [newProduct] = await db.insert(products).values(product).returning();
+      console.log('🗄️ Storage: Product created successfully:', newProduct.id);
+      return newProduct;
+    } catch (error) {
+      console.error('🗄️ Storage: Error creating product:', error);
+      throw error;
+    }
   }
 
   async updateProduct(id: string, product: Partial<InsertProduct>): Promise<Product> {
@@ -202,8 +209,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createProductPricing(pricing: InsertProductPricing): Promise<ProductPricing> {
-    const [newPricing] = await db.insert(productPricing).values(pricing).returning();
-    return newPricing;
+    console.log('💰 Storage: Creating pricing with data:', JSON.stringify(pricing, null, 2));
+    try {
+      const [newPricing] = await db.insert(productPricing).values(pricing).returning();
+      console.log('💰 Storage: Pricing created successfully:', newPricing.id);
+      return newPricing;
+    } catch (error) {
+      console.error('💰 Storage: Error creating pricing:', error);
+      throw error;
+    }
   }
 
   async updateProductPricing(id: string, pricing: Partial<InsertProductPricing>): Promise<ProductPricing> {
@@ -265,8 +279,15 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createBooking(booking: InsertBooking): Promise<Booking> {
-    const [newBooking] = await db.insert(bookings).values(booking).returning();
-    return newBooking;
+    console.log('📅 Storage: Creating booking with data:', JSON.stringify(booking, null, 2));
+    try {
+      const [newBooking] = await db.insert(bookings).values(booking).returning();
+      console.log('📅 Storage: Booking created successfully:', newBooking.id);
+      return newBooking;
+    } catch (error) {
+      console.error('📅 Storage: Error creating booking:', error);
+      throw error;
+    }
   }
 
   async updateBooking(id: string, booking: Partial<InsertBooking>): Promise<Booking> {
