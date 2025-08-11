@@ -11,6 +11,7 @@ import Home from "@/pages/home";
 import Products from "@/pages/products";
 import AddItem from "@/pages/add-item";
 import Notifications from "@/pages/notifications";
+import Profile from "@/pages/profile";
 import AdminDashboard from "@/pages/admin-dashboard";
 import Bookings from "@/pages/bookings";
 import { GoogleOAuthProvider } from '@react-oauth/google';
@@ -42,6 +43,7 @@ function Router() {
       <Route path="/products" component={Products} />
       <Route path="/add-item" component={AddItem} />
       <Route path="/notifications" component={Notifications} />
+      <Route path="/profile" component={Profile} />
       <Route path="/admin" component={AdminDashboard} />
       <Route path="/bookings" component={Bookings} />
       <Route component={NotFound} />

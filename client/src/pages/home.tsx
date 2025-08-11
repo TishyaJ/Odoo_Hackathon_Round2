@@ -28,14 +28,16 @@ export default function Home() {
     retry: false,
   });
 
-  const { data: adminStats = { activeRentals: 0, lateReturns: 0, monthlyRevenue: 0, pendingPickups: 0 } } = useQuery<{
+  const { data: userStats = { activeRentals: 0, lateReturns: 0, totalSpent: 0, totalEarned: 0, itemsListed: 0, joinDate: new Date() } } = useQuery<{
     activeRentals: number;
     lateReturns: number;
-    monthlyRevenue: number;
-    pendingPickups: number;
+    totalSpent: number;
+    totalEarned: number;
+    itemsListed: number;
+    joinDate: Date;
   }>({
-    queryKey: ["/api/admin/stats"],
-    enabled: user?.role === 'admin',
+    queryKey: ["/api/user/stats"],
+    enabled: !!user,
     retry: false,
   });
 
@@ -133,8 +135,8 @@ export default function Home() {
           </Card>
         </div>
 
-        {/* Stats */}
-        {adminStats && (
+        {/* User Stats */}
+        {userStats && (
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-12">
             <Card className="border border-gray-200 shadow-sm">
               <CardContent className="p-6">
@@ -146,7 +148,7 @@ export default function Home() {
                   </div>
                   <div className="ml-3">
                     <p className="text-sm text-gray-600">Active Rentals</p>
-                    <p className="text-xl font-bold text-gray-900">{adminStats.activeRentals}</p>
+                    <p className="text-xl font-bold text-gray-900">{userStats.activeRentals}</p>
                   </div>
                 </div>
               </CardContent>
@@ -162,7 +164,7 @@ export default function Home() {
                   </div>
                   <div className="ml-3">
                     <p className="text-sm text-gray-600">Late Returns</p>
-                    <p className="text-xl font-bold text-gray-900">{adminStats.lateReturns}</p>
+                    <p className="text-xl font-bold text-gray-900">{userStats.lateReturns}</p>
                   </div>
                 </div>
               </CardContent>
@@ -178,8 +180,8 @@ export default function Home() {
                     </svg>
                   </div>
                   <div className="ml-3">
-                    <p className="text-sm text-gray-600">Revenue (Month)</p>
-                    <p className="text-xl font-bold text-gray-900">${adminStats.monthlyRevenue.toLocaleString()}</p>
+                    <p className="text-sm text-gray-600">Total Spent</p>
+                    <p className="text-xl font-bold text-gray-900">${userStats.totalSpent.toLocaleString()}</p>
                   </div>
                 </div>
               </CardContent>
@@ -194,8 +196,8 @@ export default function Home() {
                     </svg>
                   </div>
                   <div className="ml-3">
-                    <p className="text-sm text-gray-600">Pending Pickups</p>
-                    <p className="text-xl font-bold text-gray-900">{adminStats.pendingPickups}</p>
+                    <p className="text-sm text-gray-600">Items Listed</p>
+                    <p className="text-xl font-bold text-gray-900">{userStats.itemsListed}</p>
                   </div>
                 </div>
               </CardContent>
@@ -209,7 +211,11 @@ export default function Home() {
             <h2 className="text-2xl font-bold text-gray-900 mb-6">Popular Categories</h2>
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
               {categories.map((category: any) => (
-                <Card key={category.id} className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200 cursor-pointer">
+                <Card 
+                  key={category.id} 
+                  className="border border-gray-200 shadow-sm hover:shadow-md transition-shadow duration-200 cursor-pointer"
+                  onClick={() => setLocation(`/products?category=${category.id}`)}
+                >
                   <CardContent className="p-4 text-center">
                     <div className="bg-gray-100 rounded-full w-12 h-12 flex items-center justify-center mx-auto mb-2">
                       <span className="text-gray-600 text-xl">{category.icon || '📦'}</span>

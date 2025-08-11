@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -16,13 +17,19 @@ import { isUnauthorizedError } from "@/lib/authUtils";
 export default function Products() {
   const { user, isLoading } = useAuth();
   const { toast } = useToast();
+  const [location, setLocation] = useLocation();
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [showBookingModal, setShowBookingModal] = useState(false);
   const [showAddProductModal, setShowAddProductModal] = useState(false);
+  
+  // Parse URL parameters
+  const urlParams = new URLSearchParams(window.location.search);
+  const categoryFromUrl = urlParams.get('category');
+  
   const [filters, setFilters] = useState({
     searchQuery: "",
-    categoryId: "all",
+    categoryId: categoryFromUrl || "all",
     minPrice: "",
     maxPrice: "",
     location: "",

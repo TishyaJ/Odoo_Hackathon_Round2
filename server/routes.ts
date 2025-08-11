@@ -704,6 +704,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get('/api/user/stats', authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      console.log('📊 Fetching user stats for:', req.user!.id);
+      const stats = await storage.getUserStats(req.user!.id);
+      console.log('📊 User stats:', stats);
+      res.json(stats);
+    } catch (error) {
+      console.error("Get user stats error:", error);
+      res.status(500).json({ message: "Failed to fetch user stats" });
+    }
+  });
+
   app.get('/api/admin/late-bookings', authenticateToken, requireAdmin, async (req, res) => {
     try {
       const lateBookings = await storage.getLateBookings();
@@ -899,6 +911,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Get user error:', error);
       res.status(500).json({ message: 'Failed to fetch user' });
+    }
+  });
+
+  // Update user profile
+  app.put('/api/auth/user', authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      console.log('👤 Updating user profile:', req.user!.id, req.body);
+      const updatedUser = await storage.updateUser(req.user!.id, req.body);
+      console.log('👤 User profile updated successfully');
+      res.json({
+        id: updatedUser.id,
+        email: updatedUser.email,
+        firstName: updatedUser.firstName,
+        lastName: updatedUser.lastName,
+        role: updatedUser.role,
+        customerType: updatedUser.customerType,
+      });
+    } catch (error) {
+      console.error("Update user error:", error);
+      res.status(500).json({ message: "Failed to update user" });
     }
   });
 

@@ -92,6 +92,14 @@ export interface IStorage {
     monthlyRevenue: number;
     pendingPickups: number;
   }>;
+  getUserStats(userId: string): Promise<{
+    activeRentals: number;
+    lateReturns: number;
+    totalSpent: number;
+    totalEarned: number;
+    itemsListed: number;
+    joinDate: Date;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -463,6 +471,69 @@ export class DatabaseStorage implements IStorage {
       monthlyRevenue: Number(revenue),
       pendingPickups: Number(pendingPickups),
     };
+  }
+
+  async getUserStats(userId: string): Promise<{
+    activeRentals: number;
+    lateReturns: number;
+    totalSpent: number;
+    totalEarned: number;
+    itemsListed: number;
+    joinDate: Date;
+  }> {
+    try {
+      console.log('📊 Calculating user stats for:', userId);
+      
+      // Get user's bookings as customer
+      const customerBookings = await db.select().from(bookings).where(eq(bookings.customerId, userId));
+      
+      // Get user's products as owner
+      const userProducts = await db.select().from(products).where(eq(products.ownerId, userId));
+      
+      // Get bookings for user's products (as owner)
+      const ownerBookings = await db.select().from(bookings)
+        .where(sql`${bookings.productId} IN (${sql.join(userProducts.map(p => sql`${p.id}`), sql`, `)})`);
+      
+      // Get user info for join date
+      const user = await this.getUser(userId);
+      
+      // Calculate stats
+      const now = new Date();
+      const activeRentals = customerBookings.filter(b => 
+        b.status === 'active' && new Date(b.endDate) >= now
+      ).length;
+      
+      const lateReturns = customerBookings.filter(b => 
+        b.status === 'active' && new Date(b.endDate) < now
+      ).length;
+      
+      const totalSpent = customerBookings.reduce((sum, b) => sum + (parseFloat(b.totalAmount) || 0), 0);
+      const totalEarned = ownerBookings.reduce((sum, b) => sum + (parseFloat(b.totalAmount) || 0), 0);
+      const itemsListed = userProducts.length;
+      
+      const stats = {
+        activeRentals,
+        lateReturns,
+        totalSpent,
+        totalEarned,
+        itemsListed,
+        joinDate: user?.createdAt || new Date(),
+      };
+      
+      console.log('📊 Calculated user stats:', stats);
+      return stats;
+    } catch (error) {
+      console.error('📊 Error calculating user stats:', error);
+      // Return default stats on error
+      return {
+        activeRentals: 0,
+        lateReturns: 0,
+        totalSpent: 0,
+        totalEarned: 0,
+        itemsListed: 0,
+        joinDate: new Date(),
+      };
+    }
   }
 }
 

@@ -55,7 +55,9 @@ export default function Navigation() {
           <div className="flex items-center space-x-4">
             <div className="hidden md:flex items-center space-x-2">
               <span className="text-sm text-gray-600">Welcome back,</span>
-              <span className="text-sm font-medium text-gray-900">{user?.firstName || user?.email || 'User'}</span>
+              <Link href="/profile" className="text-sm font-medium text-gray-900 hover:text-rental-primary transition-colors">
+                {user?.firstName || user?.email || 'User'}
+              </Link>
               <Badge variant="secondary" className="bg-rental-primary text-white">{user?.role || 'Customer'}</Badge>
             </div>
             
