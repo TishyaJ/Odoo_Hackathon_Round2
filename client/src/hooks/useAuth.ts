@@ -1,9 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import type { User } from "@shared/schema";
 
 export function useAuth() {
   const token = localStorage.getItem('authToken');
+  const queryClient = useQueryClient();
   
   const { data: user, isLoading } = useQuery<User>({
     queryKey: ["/api/auth/user"],
@@ -19,12 +20,13 @@ export function useAuth() {
 
   const login = (token: string) => {
     localStorage.setItem('authToken', token);
-    setUser(null); // Reset user to trigger refetch
+    queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
     window.location.href = '/';
   };
 
   const logout = () => {
     localStorage.removeItem('authToken');
+    queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
     window.location.href = '/login';
   };
 

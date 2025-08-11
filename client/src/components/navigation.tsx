@@ -58,7 +58,6 @@ export default function Navigation() {
               <Link href="/profile" className="text-sm font-medium text-gray-900 hover:text-rental-primary transition-colors">
                 {user?.firstName || user?.email || 'User'}
               </Link>
-              <Badge variant="secondary" className="bg-rental-primary text-white">{user?.role || 'Customer'}</Badge>
             </div>
             
             <div className="relative">
