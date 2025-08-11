@@ -29,7 +29,7 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
     startDate: '',
     endDate: '',
     quantity: 1,
-    durationType: 'daily' as string,
+    durationType: 'hourly' as string,
   });
   
   const [pricing, setPricing] = useState({
@@ -95,21 +95,8 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
     const endDate = new Date(booking.endDate);
     const timeDiff = endDate.getTime() - startDate.getTime();
     
-    let duration = 1;
-    switch (booking.durationType) {
-      case 'hourly':
-        duration = Math.ceil(timeDiff / (1000 * 60 * 60));
-        break;
-      case 'daily':
-        duration = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
-        break;
-      case 'weekly':
-        duration = Math.ceil(timeDiff / (1000 * 60 * 60 * 24 * 7));
-        break;
-      case 'monthly':
-        duration = Math.ceil(timeDiff / (1000 * 60 * 60 * 24 * 30));
-        break;
-    }
+    // Only hourly is supported
+    const duration = Math.max(1, Math.ceil(timeDiff / (1000 * 60 * 60)));
 
     const basePrice = parseFloat(selectedPricing.basePrice) * duration * booking.quantity;
     const discountPercentage = parseFloat(selectedPricing.discountPercentage) || 0;

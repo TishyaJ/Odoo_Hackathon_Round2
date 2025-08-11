@@ -110,6 +110,41 @@ export default function Profile() {
     },
   });
 
+  const deleteProductMutation = useMutation({
+    mutationFn: async (productId: string) => {
+      const response = await apiRequest("DELETE", `/api/products/${productId}`);
+      if (!response.ok) throw new Error("Failed to delete product");
+      // Some environments may return 204 No Content; don't try to parse JSON
+      return;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Product Deleted",
+        description: "Your listing has been removed successfully.",
+      });
+      // Optimistically remove from cached products
+      queryClient.setQueryData<any[]>(["/api/products"], (old) => {
+        if (!old) return old;
+        return old.filter((p: any) => p.ownerId !== user?.id ? true : p.isDeleted !== true);
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/stats"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Delete Failed",
+        description: error.message || "Failed to delete product",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDeleteProduct = (productId: string) => {
+    if (window.confirm("Are you sure you want to delete this listing? This action cannot be undone.")) {
+      deleteProductMutation.mutate(productId);
+    }
+  };
+
   const handleSaveProfile = () => {
     updateProfileMutation.mutate(profileData);
   };
@@ -407,8 +442,22 @@ export default function Profile() {
                             <div>
                               <p className="font-medium">{product.name}</p>
                               <p className="text-sm text-gray-600">{product.location}</p>
+                              <p className="text-xs text-gray-500">Quantity: {product.quantity}</p>
                             </div>
-                            <Badge className="bg-blue-500">Listed</Badge>
+                            <div className="flex items-center space-x-2">
+                              <Badge className="bg-blue-500">Listed</Badge>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteProduct(product.id);
+                                }}
+                                disabled={deleteProductMutation.isPending}
+                              >
+                                {deleteProductMutation.isPending ? "Deleting..." : "Delete"}
+                              </Button>
+                            </div>
                           </div>
                         ))}
                         <Button onClick={() => setLocation("/products")} variant="outline" className="w-full">

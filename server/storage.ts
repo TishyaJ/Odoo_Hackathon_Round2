@@ -205,7 +205,20 @@ export class DatabaseStorage implements IStorage {
   }
 
   async deleteProduct(id: string): Promise<void> {
-    await db.update(products).set({ isActive: false }).where(eq(products.id, id));
+    // Delete related data first (due to foreign key constraints)
+    await db.delete(productPricing).where(eq(productPricing.productId, id));
+    
+    // Delete business config entries for this product
+    await db.delete(businessConfig).where(sql`${businessConfig.key} LIKE ${`product_${id}_%`}`);
+    
+    // Finally delete the product
+    await db.delete(products).where(eq(products.id, id));
+  }
+
+  async softDeleteProduct(id: string): Promise<void> {
+    // Soft delete product and related pricing so it's hidden everywhere but retains history
+    await db.update(products).set({ isActive: false, updatedAt: new Date() }).where(eq(products.id, id));
+    await db.update(productPricing).set({ isActive: false }).where(eq(productPricing.productId, id));
   }
 
   // Product pricing operations

@@ -22,6 +22,11 @@ export default function ProductCard({ product, onClick }: ProductCardProps) {
     const availableFrom = product.availableFrom ? new Date(product.availableFrom) : null;
     const availableUntil = product.availableUntil ? new Date(product.availableUntil) : null;
     
+    // Check quantity first - if 0, it's sold out regardless of dates
+    if (product.quantity <= 0) {
+      return { status: 'sold_out', color: 'bg-red-500 text-white', text: 'Sold Out' };
+    }
+    
     // If no dates are set, assume always available
     if (!availableFrom && !availableUntil) {
       return { status: 'available', color: 'bg-green-500 text-white', text: 'Available' };
@@ -67,7 +72,7 @@ export default function ProductCard({ product, onClick }: ProductCardProps) {
   };
 
   const primaryImage = product.images?.[0] || null;
-  const basePrice = pricing?.find((p: any) => p.durationType === 'daily')?.basePrice || 0;
+  const basePrice = pricing?.find((p: any) => p.durationType === 'hourly')?.basePrice || 0;
 
   return (
     <Card className="group hover:shadow-lg transition-all duration-300 overflow-hidden cursor-pointer" onClick={onClick}>

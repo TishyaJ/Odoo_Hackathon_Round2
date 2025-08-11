@@ -28,7 +28,7 @@ export const sessions = pgTable(
 // Enums
 export const userRoleEnum = pgEnum('user_role', ['customer', 'admin']);
 export const bookingStatusEnum = pgEnum('booking_status', ['reserved', 'confirmed', 'pickup', 'active', 'returned', 'late', 'cancelled']);
-export const durationTypeEnum = pgEnum('duration_type', ['hourly', 'daily', 'weekly', 'monthly']);
+export const durationTypeEnum = pgEnum('duration_type', ['hourly']);
 
 // User storage table (JWT + bcrypt authentication)
 export const users = pgTable("users", {

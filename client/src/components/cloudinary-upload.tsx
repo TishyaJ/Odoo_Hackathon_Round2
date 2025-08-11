@@ -35,10 +35,6 @@ export default function CloudinaryUpload({ onSuccess }: CloudinaryUploadProps) {
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [pricing, setPricing] = useState({
     hourly: { enabled: false, price: '' },
-    daily: { enabled: false, price: '' },
-    weekly: { enabled: false, price: '' },
-    monthly: { enabled: false, price: '' },
-    yearly: { enabled: false, price: '' },
   });
   
   const [lateFees, setLateFees] = useState({
@@ -92,10 +88,6 @@ export default function CloudinaryUpload({ onSuccess }: CloudinaryUploadProps) {
     setUploadedImages([]);
     setPricing({
       hourly: { enabled: false, price: '' },
-      daily: { enabled: false, price: '' },
-      weekly: { enabled: false, price: '' },
-      monthly: { enabled: false, price: '' },
-      yearly: { enabled: false, price: '' },
     });
     setLateFees({
       dailyRate: '',
@@ -423,10 +415,6 @@ export default function CloudinaryUpload({ onSuccess }: CloudinaryUploadProps) {
           <CardContent className="p-4 space-y-4">
             {[
               { key: 'hourly', label: 'Per Hour', icon: '⏰' },
-              { key: 'daily', label: 'Per Day', icon: '📅' },
-              { key: 'weekly', label: 'Per Week', icon: '📆' },
-              { key: 'monthly', label: 'Per Month', icon: '🗓️' },
-              { key: 'yearly', label: 'Per Year', icon: '📊' },
             ].map(({ key, label, icon }) => (
               <div key={key} className="flex items-center space-x-4 p-3 bg-white rounded-lg border">
                 <Checkbox

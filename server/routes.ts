@@ -531,6 +531,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete('/api/products/:id', authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const productId = req.params.id;
+      
+      // Get the product to check ownership
+      const product = await storage.getProduct(productId);
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+      
+      // Check if the user owns this product
+      if (product.ownerId !== req.user!.id) {
+        return res.status(403).json({ message: "You can only delete your own products" });
+      }
+      
+      // Check if there are any bookings referencing this product
+      const hasAnyBookings = (await storage.getBookings({ productId })).length > 0;
+      if (hasAnyBookings) {
+        // If any booking exists, use soft-delete (hide from catalog, keep history)
+        await storage.softDeleteProduct(productId);
+      } else {
+        // No bookings at all -> hard delete
+        await storage.deleteProduct(productId);
+      }
+      
+      console.log(`🗑️ Product ${productId} deleted by user ${req.user!.id}`);
+      res.json({ message: "Product deleted successfully" });
+    } catch (error) {
+      console.error("Delete product error:", error);
+      res.status(500).json({ message: "Failed to delete product" });
+    }
+  });
+
   // Bookings routes
   app.get('/api/bookings', authenticateToken, async (req: AuthRequest, res) => {
     try {
@@ -585,6 +618,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       console.log('📅 Processed booking data:', JSON.stringify(processedBookingData, null, 2));
       
       const booking = await storage.createBooking(processedBookingData);
+      // Decrement product quantity by booked quantity
+      try {
+        const product = await storage.getProduct(booking.productId);
+        if (product) {
+          const newQty = Math.max(0, (product.quantity || 0) - (booking.quantity || 1));
+          await storage.updateProduct(product.id, { quantity: newQty as any });
+        }
+      } catch (qtyError) {
+        console.error('Quantity update error:', qtyError);
+      }
       
                      // Send email notifications
                try {
@@ -669,7 +712,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.patch('/api/bookings/:id', authenticateToken, async (req: AuthRequest, res) => {
     try {
+      const bookingBefore = await storage.getBooking(req.params.id);
       const booking = await storage.updateBooking(req.params.id, req.body);
+      // If cancelling and at least 1 day before start, restore quantity
+      try {
+        if (req.body.status === 'cancelled' && bookingBefore && bookingBefore.status !== 'cancelled') {
+          const now = new Date();
+          const start = new Date(bookingBefore.startDate);
+          const oneDayBefore = new Date(start.getTime() - 24 * 60 * 60 * 1000);
+          if (now <= oneDayBefore) {
+            const product = await storage.getProduct(bookingBefore.productId);
+            if (product) {
+              const restoredQty = (product.quantity || 0) + (bookingBefore.quantity || 1);
+              await storage.updateProduct(product.id, { quantity: restoredQty as any });
+            }
+          }
+        }
+      } catch (qtyRestoreErr) {
+        console.error('Quantity restore error:', qtyRestoreErr);
+      }
       res.json(booking);
     } catch (error) {
       console.error("Update booking error:", error);

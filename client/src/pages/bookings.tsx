@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -15,6 +15,7 @@ import { apiRequest } from "@/lib/queryClient";
 export default function Bookings() {
   const { user, isLoading } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [filters, setFilters] = useState({
     status: "all",
     startDate: "",
@@ -97,6 +98,49 @@ export default function Bookings() {
 
   const handleFilterChange = (key: string, value: string) => {
     setFilters(prev => ({ ...prev, [key]: value }));
+  };
+
+  const cancelBookingMutation = useMutation({
+    mutationFn: async (bookingId: string) => {
+      const response = await apiRequest("PATCH", `/api/bookings/${bookingId}`, {
+        status: 'cancelled'
+      });
+      if (!response.ok) throw new Error("Failed to cancel booking");
+      return response.json();
+    },
+    onSuccess: () => {
+      toast({
+        title: "Booking Cancelled",
+        description: "Your booking has been cancelled successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Cancellation Failed",
+        description: error.message || "Failed to cancel booking",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleCancelBooking = (bookingId: string, startDate: string) => {
+    const startDateTime = new Date(startDate);
+    const now = new Date();
+    const oneDayBefore = new Date(startDateTime.getTime() - 24 * 60 * 60 * 1000);
+    
+    if (now > oneDayBefore) {
+      toast({
+        title: "Cannot Cancel",
+        description: "Bookings can only be cancelled at least 1 day before the start date.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    if (window.confirm("Are you sure you want to cancel this booking? This action cannot be undone.")) {
+      cancelBookingMutation.mutate(bookingId);
+    }
   };
 
   const filteredBookings = Array.isArray(bookings) ? bookings.filter((booking: any) => {
@@ -205,7 +249,13 @@ export default function Bookings() {
               </Card>
             ) : (
               groupedBookings.active.map((booking: any) => (
-                <BookingCard key={booking.id} booking={booking} products={products} />
+                <BookingCard 
+                  key={booking.id} 
+                  booking={booking} 
+                  products={products}
+                  onCancel={handleCancelBooking}
+                  isCancelling={cancelBookingMutation.isPending}
+                />
               ))
             )}
           </TabsContent>
@@ -241,7 +291,13 @@ export default function Bookings() {
               </Card>
             ) : (
               groupedBookings.completed.map((booking: any) => (
-                <BookingCard key={booking.id} booking={booking} products={products} />
+                <BookingCard 
+                  key={booking.id} 
+                  booking={booking} 
+                  products={products}
+                  onCancel={handleCancelBooking}
+                  isCancelling={cancelBookingMutation.isPending}
+                />
               ))
             )}
           </TabsContent>
@@ -259,7 +315,13 @@ export default function Bookings() {
               </Card>
             ) : (
               groupedBookings.cancelled.map((booking: any) => (
-                <BookingCard key={booking.id} booking={booking} products={products} />
+                <BookingCard 
+                  key={booking.id} 
+                  booking={booking} 
+                  products={products}
+                  onCancel={handleCancelBooking}
+                  isCancelling={cancelBookingMutation.isPending}
+                />
               ))
             )}
           </TabsContent>
@@ -272,9 +334,11 @@ export default function Bookings() {
 interface BookingCardProps {
   booking: any;
   products?: any[];
+  onCancel?: (bookingId: string, startDate: string) => void;
+  isCancelling?: boolean;
 }
 
-function BookingCard({ booking, products }: BookingCardProps) {
+function BookingCard({ booking, products, onCancel, isCancelling }: BookingCardProps) {
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'reserved':
@@ -384,12 +448,35 @@ function BookingCard({ booking, products }: BookingCardProps) {
             )}
           </div>
           <div className="flex space-x-2">
-            <Button variant="outline" size="sm">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              onClick={() => {
+                const start = new Date(booking.startDate);
+                const now = new Date();
+                const oneDayBefore = new Date(start.getTime() - 24*60*60*1000);
+                const canCancel = now <= oneDayBefore && (booking.status === 'reserved' || booking.status === 'confirmed');
+                const msg = `Booking #${booking.id.slice(-8)}\nQuantity: ${booking.quantity}\nDates: ${new Date(booking.startDate).toLocaleDateString()} - ${new Date(booking.endDate).toLocaleDateString()}\nStatus: ${booking.status}\n\n${canCancel ? 'You can cancel this booking.' : 'Cannot cancel within 1 day of start or once active.'}`;
+                if (canCancel) {
+                  if (confirm(msg + '\n\nDo you want to cancel this booking?')) {
+                    // @ts-ignore accessing closure from parent
+                    onCancel && onCancel(booking.id, booking.startDate);
+                  }
+                } else {
+                  alert(msg);
+                }
+              }}
+            >
               View Details
             </Button>
-            {booking.status === 'reserved' && (
-              <Button size="sm" variant="destructive">
-                Cancel
+            {booking.status === 'reserved' && onCancel && (
+              <Button 
+                size="sm" 
+                variant="destructive"
+                onClick={() => onCancel(booking.id, booking.startDate)}
+                disabled={isCancelling}
+              >
+                {isCancelling ? "Cancelling..." : "Cancel"}
               </Button>
             )}
             {booking.status === 'active' && (
