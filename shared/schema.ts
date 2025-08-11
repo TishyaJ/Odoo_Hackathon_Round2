@@ -30,10 +30,11 @@ export const userRoleEnum = pgEnum('user_role', ['customer', 'admin']);
 export const bookingStatusEnum = pgEnum('booking_status', ['reserved', 'confirmed', 'pickup', 'active', 'returned', 'late', 'cancelled']);
 export const durationTypeEnum = pgEnum('duration_type', ['hourly', 'daily', 'weekly', 'monthly']);
 
-// User storage table (required for Replit Auth)
+// User storage table (JWT + bcrypt authentication)
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  email: varchar("email").unique(),
+  email: varchar("email").unique().notNull(),
+  password: varchar("password").notNull(), // bcrypt hashed password
   firstName: varchar("first_name"),
   lastName: varchar("last_name"),
   profileImageUrl: varchar("profile_image_url"),
@@ -41,6 +42,7 @@ export const users = pgTable("users", {
   customerType: varchar("customer_type"), // 'lister' or 'renter'
   stripeCustomerId: varchar("stripe_customer_id"),
   stripeSubscriptionId: varchar("stripe_subscription_id"),
+  isActive: boolean("is_active").default(true),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
 });
@@ -253,7 +255,28 @@ export const insertNotificationSchema = createInsertSchema(notifications).omit({
 });
 
 // Types
-export type UpsertUser = typeof users.$inferInsert;
+// Auth schemas
+export const loginSchema = createInsertSchema(users).pick({ 
+  email: true, 
+  password: true 
+});
+
+export const registerSchema = createInsertSchema(users).pick({
+  email: true,
+  password: true,
+  firstName: true,
+  lastName: true,
+  customerType: true
+}).extend({
+  confirmPassword: z.string()
+}).refine(data => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"]
+});
+
+export type LoginData = z.infer<typeof loginSchema>;
+export type RegisterData = z.infer<typeof registerSchema>;
+
 export type User = typeof users.$inferSelect;
 export type Category = typeof categories.$inferSelect;
 export type Product = typeof products.$inferSelect;
@@ -265,7 +288,7 @@ export type DurationOption = typeof durationOptions.$inferSelect;
 export type StatusConfig = typeof statusConfig.$inferSelect;
 export type BusinessConfig = typeof businessConfig.$inferSelect;
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
+export type InsertUser = typeof users.$inferInsert;
 export type InsertCategory = z.infer<typeof insertCategorySchema>;
 export type InsertProduct = z.infer<typeof insertProductSchema>;
 export type InsertProductPricing = z.infer<typeof insertProductPricingSchema>;
