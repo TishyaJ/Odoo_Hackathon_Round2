@@ -1,8 +1,11 @@
 import { useState } from "react";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 
 interface ProductCardProps {
   product: any;
@@ -11,11 +14,82 @@ interface ProductCardProps {
 
 export default function ProductCard({ product, onClick }: ProductCardProps) {
   const [imageError, setImageError] = useState(false);
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const { data: pricing = [] } = useQuery<any[]>({
     queryKey: ["/api/products", product.id, "pricing"],
     retry: false,
   });
+
+  // Check if product is in wishlist
+  const { data: wishlistStatus = { isInWishlist: false } } = useQuery<{ isInWishlist: boolean }>({
+    queryKey: ["/api/wishlist", product.id, "check"],
+    queryFn: async () => {
+      if (!product?.id || !user) return { isInWishlist: false };
+      const response = await apiRequest("GET", `/api/wishlist/${product.id}/check`);
+      return response.json();
+    },
+    enabled: !!product?.id && !!user,
+    retry: false,
+  });
+
+  const addToWishlistMutation = useMutation({
+    mutationFn: async (productId: string) => {
+      const response = await apiRequest("POST", `/api/wishlist/${productId}`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/wishlist", product.id, "check"] });
+      toast({
+        title: "Added to Wishlist",
+        description: "Item has been added to your wishlist!",
+      });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: "Unable to add to wishlist. Please try again.", variant: "destructive" });
+    },
+  });
+
+  const removeFromWishlistMutation = useMutation({
+    mutationFn: async (productId: string) => {
+      const response = await apiRequest("DELETE", `/api/wishlist/${productId}`);
+      return response;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/wishlist", product.id, "check"] });
+      toast({
+        title: "Removed from Wishlist",
+        description: "Item has been removed from your wishlist.",
+      });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: "Unable to remove from wishlist. Please try again.", variant: "destructive" });
+    },
+  });
+
+  // Check if current user is the product owner
+  const isOwner = user?.id === product.ownerId;
+
+  const handleWishlistToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    
+    if (!user) {
+      toast({
+        title: "Please Login",
+        description: "You need to be logged in to use the wishlist.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (wishlistStatus.isInWishlist) {
+      removeFromWishlistMutation.mutate(product.id);
+    } else {
+      addToWishlistMutation.mutate(product.id);
+    }
+  };
 
   const getAvailabilityStatus = () => {
     const now = new Date();
@@ -72,7 +146,7 @@ export default function ProductCard({ product, onClick }: ProductCardProps) {
   };
 
   const primaryImage = product.images?.[0] || null;
-  const basePrice = pricing?.find((p: any) => p.durationType === 'hourly')?.basePrice || 0;
+  const hourlyPrice = pricing?.find((p: any) => p.durationType === 'hourly')?.basePrice || 0;
 
   return (
     <Card className="group hover:shadow-lg transition-all duration-300 overflow-hidden cursor-pointer" onClick={onClick}>
@@ -110,12 +184,9 @@ export default function ProductCard({ product, onClick }: ProductCardProps) {
           variant="ghost"
           size="sm"
           className="absolute top-3 right-3 p-2 bg-white bg-opacity-90 rounded-full hover:bg-opacity-100"
-          onClick={(e) => {
-            e.stopPropagation();
-            // TODO: Implement favorite functionality
-          }}
+          onClick={handleWishlistToggle}
         >
-          <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <svg className={`w-4 h-4 ${wishlistStatus.isInWishlist ? 'text-red-500' : 'text-gray-600'}`} fill={wishlistStatus.isInWishlist ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4.318 6.318a4.5 4.5 0 000 6.364L12 20.364l7.682-7.682a4.5 4.5 0 00-6.364-6.364L12 7.636l-1.318-1.318a4.5 4.5 0 00-6.364 0z" />
           </svg>
         </Button>
@@ -127,8 +198,21 @@ export default function ProductCard({ product, onClick }: ProductCardProps) {
             {product.name}
           </h3>
           <div className="text-right ml-2">
-            <p className="text-lg font-bold text-gray-900">${basePrice}</p>
-            <p className="text-xs text-gray-500">/day</p>
+            {pricing && pricing.length > 0 ? (
+              <>
+                <p className="text-lg font-bold text-gray-900">
+                  ${Math.min(...pricing.map((p: any) => parseFloat(p.basePrice))).toFixed(2)}
+                </p>
+                <p className="text-xs text-gray-500">
+                  from {pricing.find((p: any) => parseFloat(p.basePrice) === Math.min(...pricing.map((p: any) => parseFloat(p.basePrice))))?.durationType}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-lg font-bold text-gray-900">$0</p>
+                <p className="text-xs text-gray-500">/hour</p>
+              </>
+            )}
           </div>
         </div>
         
@@ -151,27 +235,42 @@ export default function ProductCard({ product, onClick }: ProductCardProps) {
           </div>
         </div>
         
-        {/* Quick Pricing Preview */}
+        {/* Pricing Preview */}
         {pricing && pricing.length > 0 && (
           <div className="bg-gray-50 rounded-lg p-3 mb-3">
-            <p className="text-xs text-gray-600 mb-2">Quick pricing preview:</p>
-            <div className="grid grid-cols-3 gap-2 text-xs">
-              {pricing.slice(0, 3).map((price: any) => (
-                <div key={price.durationType} className="text-center">
-                  <p className="font-medium text-gray-900">${price.basePrice}</p>
-                  <p className="text-gray-500">{price.durationType}</p>
-                  {price.discountPercentage > 0 && (
-                    <p className="text-green-600 text-xs">Save {price.discountPercentage}%</p>
-                  )}
+            <p className="text-xs text-gray-600 mb-2">💰 Pricing Options:</p>
+            <div className="grid grid-cols-2 gap-2 text-xs">
+              {pricing.map((price: any) => (
+                <div key={price.durationType} className="flex items-center justify-between bg-white rounded p-2">
+                  <div className="flex items-center">
+                    <span className="mr-1">
+                      {price.durationType === 'hourly' ? '⏰' : 
+                       price.durationType === 'daily' ? '📅' : 
+                       price.durationType === 'weekly' ? '📆' : '📊'}
+                    </span>
+                    <span className="text-gray-600 capitalize">{price.durationType}</span>
+                  </div>
+                  <div className="text-right">
+                    <p className="font-medium text-gray-900">${price.basePrice}</p>
+                    {price.discountPercentage > 0 && (
+                      <p className="text-green-600 text-xs">-{price.discountPercentage}%</p>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>
           </div>
         )}
         
-        <Button className="w-full bg-rental-primary text-white hover:bg-blue-700">
-          Book Now
-        </Button>
+        {isOwner ? (
+          <Button className="w-full bg-gray-400 text-white cursor-not-allowed" disabled>
+            Your Item
+          </Button>
+        ) : (
+          <Button className="w-full bg-rental-primary text-white hover:bg-blue-700">
+            Book Now
+          </Button>
+        )}
       </CardContent>
     </Card>
   );

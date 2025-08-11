@@ -88,6 +88,16 @@ export default function Products() {
   };
 
   const handleProductClick = (product: any) => {
+    // Check if user is trying to book their own item
+    if (user?.id === product.ownerId) {
+      toast({
+        title: "Cannot Book Own Item",
+        description: "You cannot book your own item.",
+        variant: "destructive",
+      });
+      return;
+    }
+    
     setSelectedProduct(product);
     setShowBookingModal(true);
   };

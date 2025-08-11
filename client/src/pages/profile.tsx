@@ -119,13 +119,13 @@ export default function Profile() {
     },
     onSuccess: () => {
       toast({
-        title: "Product Deleted",
-        description: "Your listing has been removed successfully.",
+        title: "Product Removed",
+        description: "Your listing has been removed from the catalog successfully.",
       });
       // Optimistically remove from cached products
       queryClient.setQueryData<any[]>(["/api/products"], (old) => {
         if (!old) return old;
-        return old.filter((p: any) => p.ownerId !== user?.id ? true : p.isDeleted !== true);
+        return old.filter((p: any) => p.id !== productId);
       });
       queryClient.invalidateQueries({ queryKey: ["/api/products"] });
       queryClient.invalidateQueries({ queryKey: ["/api/user/stats"] });

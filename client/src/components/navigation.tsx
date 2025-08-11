@@ -1,83 +1,131 @@
-import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
-import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Bell, User, LogOut, Plus, Heart } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 
 export default function Navigation() {
   const { user, logout } = useAuth();
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
 
   const { data: notifications = [] } = useQuery<any[]>({
     queryKey: ["/api/notifications"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/notifications");
+      return response.json();
+    },
+    enabled: !!user,
     retry: false,
   });
 
-  const unreadCount = notifications?.filter((n: any) => !n.isRead).length || 0;
+  const unreadCount = notifications.filter((n: any) => !n.isRead).length;
+
+  if (!user) return null;
 
   return (
-    <nav className="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-50">
+    <nav className="bg-white shadow-sm border-b">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
-          <div className="flex items-center space-x-4">
-            <Link href="/" className="flex items-center space-x-2">
-              <div className="w-8 h-8 bg-rental-primary rounded-lg flex items-center justify-center">
-                <svg className="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20">
-                  <path d="M3 4a1 1 0 011-1h12a1 1 0 011 1v2a1 1 0 01-1 1H4a1 1 0 01-1-1V4zM3 10a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H4a1 1 0 01-1-1v-6zM14 9a1 1 0 00-1 1v6a1 1 0 001 1h2a1 1 0 001-1v-6a1 1 0 00-1-1h-2z" />
-                </svg>
-              </div>
-              <span className="text-xl font-bold text-gray-900">RentalPro</span>
-            </Link>
-            
-            <div className="hidden md:flex items-center space-x-6 ml-8">
-              <Link href="/">
-                <Button variant={location === "/" ? "default" : "ghost"} size="sm">Dashboard</Button>
-              </Link>
-              <Link href="/products">
-                <Button variant={location === "/products" ? "default" : "ghost"} size="sm">Products</Button>
-              </Link>
-              <Link href="/add-item">
-                <Button variant={location === "/add-item" ? "default" : "ghost"} size="sm" className="bg-rental-primary hover:bg-blue-700 text-white">
-                  + Add Item
-                </Button>
-              </Link>
-              <Link href="/bookings">
-                <Button variant={location === "/bookings" ? "default" : "ghost"} size="sm">My Bookings</Button>
-              </Link>
-              {user?.role === 'admin' && (
-                <Link href="/admin">
-                  <Button variant={location === "/admin" ? "default" : "ghost"} size="sm">Admin</Button>
-                </Link>
-              )}
-            </div>
-          </div>
-          
-          <div className="flex items-center space-x-4">
-            <div className="hidden md:flex items-center space-x-2">
-              <span className="text-sm text-gray-600">Welcome back,</span>
-              <Link href="/profile" className="text-sm font-medium text-gray-900 hover:text-rental-primary transition-colors">
-                {user?.firstName || user?.email || 'User'}
-              </Link>
-            </div>
-            
-            <div className="relative">
-              <Link href="/notifications">
-                <Button variant="ghost" size="sm" className="relative">
-                  <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
-                  </svg>
-                  {unreadCount > 0 && (
-                    <Badge className="absolute -top-1 -right-1 bg-red-500 text-white text-xs h-5 w-5 rounded-full flex items-center justify-center p-0">{unreadCount}</Badge>
-                  )}
-                </Button>
-              </Link>
-            </div>
-            
-            <Button variant="ghost" size="sm" onClick={logout}>
-              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" />
-              </svg>
+          {/* Logo */}
+          <div className="flex items-center">
+            <Button
+              variant="ghost"
+              className="text-xl font-bold text-rental-primary"
+              onClick={() => setLocation("/")}
+            >
+              RentalPro
             </Button>
+          </div>
+
+          {/* Navigation Links */}
+          <div className="hidden md:flex items-center space-x-8">
+            <Button
+              variant="ghost"
+              onClick={() => setLocation("/")}
+              className={location === "/" ? "text-rental-primary" : "text-gray-600"}
+            >
+              Home
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => setLocation("/products")}
+              className={location === "/products" ? "text-rental-primary" : "text-gray-600"}
+            >
+              Browse & Rent
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => setLocation("/bookings")}
+              className={location === "/bookings" ? "text-rental-primary" : "text-gray-600"}
+            >
+              My Bookings
+            </Button>
+            <Button
+              variant="ghost"
+              onClick={() => setLocation("/wishlist")}
+              className={location === "/wishlist" ? "text-rental-primary" : "text-gray-600"}
+            >
+              <Heart className="w-4 h-4 mr-2" />
+              Wishlist
+            </Button>
+          </div>
+
+          {/* Right side */}
+          <div className="flex items-center space-x-4">
+            {/* Add Item Button */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setLocation("/add-item")}
+              className="hidden md:flex"
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              Add Item
+            </Button>
+
+            {/* Notifications */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setLocation("/notifications")}
+              className="relative"
+            >
+              <Bell className="w-5 h-5" />
+              {unreadCount > 0 && (
+                <Badge className="absolute -top-1 -right-1 h-5 w-5 rounded-full p-0 text-xs">
+                  {unreadCount}
+                </Badge>
+              )}
+            </Button>
+
+            {/* User Menu */}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" className="flex items-center space-x-2">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={user.profileImageUrl} />
+                    <AvatarFallback>
+                      {user.firstName?.[0]}{user.lastName?.[0]}
+                    </AvatarFallback>
+                  </Avatar>
+                  <span className="hidden md:block font-medium">{user.firstName} {user.lastName}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <DropdownMenuItem onClick={() => setLocation("/profile")}>
+                  <User className="w-4 h-4 mr-2" />
+                  Profile
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={logout}>
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Logout
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </div>
         </div>
       </div>

@@ -375,6 +375,58 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ message: "Logged out successfully" });
   });
 
+  // User feedback routes
+  app.post('/api/user/feedback', authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const { category, subject, message, priority } = req.body;
+      
+      if (!category || !subject || !message) {
+        return res.status(400).json({ error: "Category, subject, and message are required" });
+      }
+
+      const feedbackData = {
+        type: category,
+        subject,
+        message,
+        priority: priority || 'medium'
+      };
+
+      const feedback = await storage.createUserFeedback(req.user!.id, feedbackData);
+      res.json(feedback);
+    } catch (error) {
+      console.error("Create user feedback error:", error);
+      res.status(500).json({ message: "Failed to submit feedback" });
+    }
+  });
+
+  app.get('/api/user/feedback', authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const feedback = await storage.getUserFeedback(req.user!.id);
+      res.json(feedback);
+    } catch (error) {
+      console.error("Get user feedback error:", error);
+      res.status(500).json({ message: "Failed to fetch feedback" });
+    }
+  });
+
+  // User stats route
+  app.get('/api/user/stats', authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const stats = await storage.getUserStats(userId);
+      
+      res.json({
+        activeRentals: stats.activeRentals,
+        totalSpent: stats.totalSpent.toFixed(2),
+        itemsListed: stats.itemsListed,
+        totalEarned: stats.totalEarned.toFixed(2)
+      });
+    } catch (error) {
+      console.error("Get user stats error:", error);
+      res.status(500).json({ message: "Failed to fetch user stats" });
+    }
+  });
+
   // Categories routes
   app.get('/api/categories', async (req, res) => {
     try {
@@ -755,7 +807,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Admin routes
-  app.get('/api/admin/stats', authenticateToken, requireAdmin, async (req, res) => {
+  app.get('/api/admin/analytics', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const analytics = await storage.getAdminAnalytics();
+      res.json(analytics);
+    } catch (error) {
+      console.error("Get admin analytics error:", error);
+      res.status(500).json({ message: "Failed to fetch analytics" });
+    }
+  });
+
+  app.get('/api/admin/stats', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
     try {
       const stats = await storage.getAdminStats();
       res.json(stats);
@@ -765,25 +827,128 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/user/stats', authenticateToken, async (req: AuthRequest, res) => {
+
+
+  app.get('/api/admin/users', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      console.log('📊 Fetching user stats for:', req.user!.id);
-      const stats = await storage.getUserStats(req.user!.id);
-      console.log('📊 User stats:', stats);
-      res.json(stats);
+      const users = await storage.getAllUsers();
+      res.json(users);
     } catch (error) {
-      console.error("Get user stats error:", error);
-      res.status(500).json({ message: "Failed to fetch user stats" });
+      console.error("Get admin users error:", error);
+      res.status(500).json({ message: "Failed to fetch users" });
     }
   });
 
-  app.get('/api/admin/late-bookings', authenticateToken, requireAdmin, async (req, res) => {
+  app.get('/api/admin/products', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
     try {
-      const lateBookings = await storage.getLateBookings();
-      res.json(lateBookings);
+      const products = await storage.getAllProducts();
+      res.json(products);
     } catch (error) {
-      console.error("Get late bookings error:", error);
-      res.status(500).json({ message: "Failed to fetch late bookings" });
+      console.error("Get admin products error:", error);
+      res.status(500).json({ message: "Failed to fetch products" });
+    }
+  });
+
+  app.get('/api/admin/bookings', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const bookings = await storage.getAllBookings();
+      res.json(bookings);
+    } catch (error) {
+      console.error("Get admin bookings error:", error);
+      res.status(500).json({ message: "Failed to fetch bookings" });
+    }
+  });
+
+  app.get('/api/admin/feedback', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const feedback = await storage.getAllFeedback();
+      res.json(feedback);
+    } catch (error) {
+      console.error("Get admin feedback error:", error);
+      res.status(500).json({ message: "Failed to fetch feedback" });
+    }
+  });
+
+  // Admin user management
+  app.patch('/api/admin/users/:userId/ban', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.params.userId;
+      await storage.banUser(userId);
+      res.json({ message: "User banned successfully" });
+    } catch (error) {
+      console.error("Ban user error:", error);
+      res.status(500).json({ message: "Failed to ban user" });
+    }
+  });
+
+  app.patch('/api/admin/users/:userId/unban', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.params.userId;
+      await storage.unbanUser(userId);
+      res.json({ message: "User unbanned successfully" });
+    } catch (error) {
+      console.error("Unban user error:", error);
+      res.status(500).json({ message: "Failed to unban user" });
+    }
+  });
+
+  // Admin product management
+  app.patch('/api/admin/products/:productId/approve', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const productId = req.params.productId;
+      await storage.approveProduct(productId);
+      res.json({ message: "Product approved successfully" });
+    } catch (error) {
+      console.error("Approve product error:", error);
+      res.status(500).json({ message: "Failed to approve product" });
+    }
+  });
+
+  app.patch('/api/admin/products/:productId/reject', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const productId = req.params.productId;
+      const { reason } = req.body;
+      await storage.rejectProduct(productId, reason);
+      res.json({ message: "Product rejected successfully" });
+    } catch (error) {
+      console.error("Reject product error:", error);
+      res.status(500).json({ message: "Failed to reject product" });
+    }
+  });
+
+  // Admin feedback management
+  app.post('/api/admin/feedback/:feedbackId/reply', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const feedbackId = req.params.feedbackId;
+      const { reply } = req.body;
+      await storage.replyToFeedback(feedbackId, reply);
+      res.json({ message: "Reply sent successfully" });
+    } catch (error) {
+      console.error("Reply to feedback error:", error);
+      res.status(500).json({ message: "Failed to send reply" });
+    }
+  });
+
+  app.patch('/api/admin/feedback/:feedbackId/archive', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const feedbackId = req.params.feedbackId;
+      await storage.archiveFeedback(feedbackId);
+      res.json({ message: "Feedback archived successfully" });
+    } catch (error) {
+      console.error("Archive feedback error:", error);
+      res.status(500).json({ message: "Failed to archive feedback" });
+    }
+  });
+
+  // Make user admin
+  app.patch('/api/admin/users/:userId/make-admin', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.params.userId;
+      await storage.makeUserAdmin(userId);
+      res.json({ message: "User made admin successfully" });
+    } catch (error) {
+      console.error("Make user admin error:", error);
+      res.status(500).json({ message: "Failed to make user admin" });
     }
   });
 
@@ -992,6 +1157,63 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Update user error:", error);
       res.status(500).json({ message: "Failed to update user" });
+    }
+  });
+
+  // Wishlist routes
+  app.get('/api/wishlist', authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const wishlistItems = await storage.getWishlist(req.user!.id);
+      res.json(wishlistItems);
+    } catch (error) {
+      console.error("Get wishlist error:", error);
+      res.status(500).json({ message: "Failed to fetch wishlist" });
+    }
+  });
+
+  app.post('/api/wishlist/:productId', authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const productId = req.params.productId;
+      
+      // Check if product exists
+      const product = await storage.getProduct(productId);
+      if (!product) {
+        return res.status(404).json({ message: "Product not found" });
+      }
+      
+      // Check if already in wishlist
+      const isInWishlist = await storage.isInWishlist(req.user!.id, productId);
+      if (isInWishlist) {
+        return res.status(400).json({ message: "Product already in wishlist" });
+      }
+      
+      const wishlistItem = await storage.addToWishlist(req.user!.id, productId);
+      res.json(wishlistItem);
+    } catch (error) {
+      console.error("Add to wishlist error:", error);
+      res.status(500).json({ message: "Failed to add to wishlist" });
+    }
+  });
+
+  app.delete('/api/wishlist/:productId', authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const productId = req.params.productId;
+      await storage.removeFromWishlist(req.user!.id, productId);
+      res.status(204).send();
+    } catch (error) {
+      console.error("Remove from wishlist error:", error);
+      res.status(500).json({ message: "Failed to remove from wishlist" });
+    }
+  });
+
+  app.get('/api/wishlist/:productId/check', authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const productId = req.params.productId;
+      const isInWishlist = await storage.isInWishlist(req.user!.id, productId);
+      res.json({ isInWishlist });
+    } catch (error) {
+      console.error("Check wishlist error:", error);
+      res.status(500).json({ message: "Failed to check wishlist" });
     }
   });
 

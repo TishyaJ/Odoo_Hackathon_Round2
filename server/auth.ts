@@ -61,6 +61,7 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
       customerType: user.customerType || undefined
     };
 
+    console.log("🔐 Authenticated user:", req.user.email, "Role:", req.user.role);
     next();
   } catch (error) {
     return res.status(401).json({ message: 'Authentication failed' });
@@ -68,8 +69,11 @@ export const authenticateToken = async (req: AuthRequest, res: Response, next: N
 };
 
 export const requireAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
+  console.log("🔒 Admin check for:", req.user?.email, "Role:", req.user?.role);
   if (!req.user || req.user.role !== 'admin') {
+    console.log("❌ Admin access denied for:", req.user?.email);
     return res.status(403).json({ message: 'Admin access required' });
   }
+  console.log("✅ Admin access granted for:", req.user.email);
   next();
 };

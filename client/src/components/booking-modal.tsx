@@ -29,7 +29,7 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
     startDate: '',
     endDate: '',
     quantity: 1,
-    durationType: 'hourly' as string,
+    durationType: 'hourly' as string, // Always hourly
   });
   
   const [pricing, setPricing] = useState({
@@ -42,6 +42,18 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
   const { data: productPricing = [] } = useQuery<any[]>({
     queryKey: ["/api/products", product?.id, "pricing"],
     enabled: !!product?.id,
+    retry: false,
+  });
+
+  // Check if product is in wishlist
+  const { data: wishlistStatus = { isInWishlist: false } } = useQuery<{ isInWishlist: boolean }>({
+    queryKey: ["/api/wishlist", product?.id, "check"],
+    queryFn: async () => {
+      if (!product?.id) return { isInWishlist: false };
+      const response = await apiRequest("GET", `/api/wishlist/${product.id}/check`);
+      return response.json();
+    },
+    enabled: !!product?.id && !!user,
     retry: false,
   });
 
@@ -84,6 +96,40 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
     },
   });
 
+  const addToWishlistMutation = useMutation({
+    mutationFn: async (productId: string) => {
+      const response = await apiRequest("POST", `/api/wishlist/${productId}`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/wishlist", product?.id, "check"] });
+      toast({
+        title: "Added to Wishlist",
+        description: "Item has been added to your wishlist!",
+      });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: "Unable to add to wishlist. Please try again.", variant: "destructive" });
+    },
+  });
+
+  const removeFromWishlistMutation = useMutation({
+    mutationFn: async (productId: string) => {
+      const response = await apiRequest("DELETE", `/api/wishlist/${productId}`);
+      return response;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/wishlist", product?.id, "check"] });
+      toast({
+        title: "Removed from Wishlist",
+        description: "Item has been removed from your wishlist.",
+      });
+    },
+    onError: (error) => {
+      toast({ title: "Failed", description: "Unable to remove from wishlist. Please try again.", variant: "destructive" });
+    },
+  });
+
   // Calculate pricing when booking details change
   useEffect(() => {
     if (!productPricing || !booking.startDate || !booking.endDate) return;
@@ -95,8 +141,24 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
     const endDate = new Date(booking.endDate);
     const timeDiff = endDate.getTime() - startDate.getTime();
     
-    // Only hourly is supported
-    const duration = Math.max(1, Math.ceil(timeDiff / (1000 * 60 * 60)));
+    // Calculate duration based on the selected duration type
+    let duration;
+    switch (booking.durationType) {
+      case 'hourly':
+        duration = Math.max(1, Math.ceil(timeDiff / (1000 * 60 * 60)));
+        break;
+      case 'daily':
+        duration = Math.max(1, Math.ceil(timeDiff / (1000 * 60 * 60 * 24)));
+        break;
+      case 'weekly':
+        duration = Math.max(1, Math.ceil(timeDiff / (1000 * 60 * 60 * 24 * 7)));
+        break;
+      case 'yearly':
+        duration = Math.max(1, Math.ceil(timeDiff / (1000 * 60 * 60 * 24 * 365)));
+        break;
+      default:
+        duration = Math.max(1, Math.ceil(timeDiff / (1000 * 60 * 60))); // Default to hourly
+    }
 
     const basePrice = parseFloat(selectedPricing.basePrice) * duration * booking.quantity;
     const discountPercentage = parseFloat(selectedPricing.discountPercentage) || 0;
@@ -121,11 +183,38 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
     setBooking(prev => ({ ...prev, quantity: newQuantity }));
   };
 
+  const handleWishlistToggle = () => {
+    if (!user) {
+      toast({
+        title: "Please Login",
+        description: "You need to be logged in to use the wishlist.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (wishlistStatus.isInWishlist) {
+      removeFromWishlistMutation.mutate(product.id);
+    } else {
+      addToWishlistMutation.mutate(product.id);
+    }
+  };
+
   const handleProceedToCheckout = () => {
     if (!user) {
       toast({
         title: "Please Login",
         description: "You need to be logged in to make a booking.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check if user is trying to book their own item
+    if (user.id === product.ownerId) {
+      toast({
+        title: "Cannot Book Own Item",
+        description: "You cannot book your own item.",
         variant: "destructive",
       });
       return;
@@ -227,21 +316,74 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
           <div className="bg-gray-50 rounded-xl p-6">
             <h4 className="text-lg font-semibold text-gray-900 mb-4">Rental Details</h4>
             
-            {/* Duration Selection */}
+            {/* Pricing Options */}
             <div className="mb-6">
-              <Label className="text-sm font-medium text-gray-700 mb-2">Rental Duration</Label>
-              <div className="grid grid-cols-2 gap-2 mt-2">
-                {durationOptions.map((option: any) => (
-                  <Button
-                    key={option.type}
-                    variant={booking.durationType === option.type ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => handleBookingChange('durationType', option.type)}
-                    className="justify-center"
-                  >
-                    {option.label}
-                  </Button>
-                ))}
+              <Label className="text-sm font-medium text-gray-700 mb-3">💰 Pricing Options</Label>
+              <div className="space-y-3">
+                {[
+                  { key: 'hourly', label: 'Per Hour', icon: '⏰', color: 'blue' },
+                  { key: 'daily', label: 'Per Day', icon: '📅', color: 'green' },
+                  { key: 'weekly', label: 'Per Week', icon: '📆', color: 'purple' },
+                  { key: 'yearly', label: 'Per Year', icon: '📊', color: 'orange' },
+                ].map(({ key, label, icon, color }) => {
+                  const pricingItem = productPricing?.find((p: any) => p.durationType === key);
+                  if (!pricingItem) return null;
+                  
+                  return (
+                    <div key={key} className={`bg-${color}-50 border border-${color}-200 rounded-lg p-3`}>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center">
+                          <span className="mr-2">{icon}</span>
+                          <h5 className={`font-medium text-${color}-900`}>{label}</h5>
+                        </div>
+                        <Badge className={`bg-${color}-500 text-white text-xs`}>
+                          ${pricingItem.basePrice}/{key === 'hourly' ? 'hour' : key === 'daily' ? 'day' : key === 'weekly' ? 'week' : 'year'}
+                        </Badge>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <span className={`text-${color}-600 font-medium`}>Base Rate:</span>
+                          <span className={`text-${color}-900 ml-1`}>${pricingItem.basePrice}</span>
+                        </div>
+                        <div>
+                          <span className={`text-${color}-600 font-medium`}>Late Fee:</span>
+                          <span className={`text-${color}-900 ml-1`}>$2.50/{key === 'hourly' ? 'hour' : 'day'}</span>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            
+            {/* Duration Type Selection */}
+            <div className="mb-6">
+              <Label className="text-sm font-medium text-gray-700 mb-3">⏱️ Select Rental Duration Type</Label>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { key: 'hourly', label: 'Hourly', icon: '⏰' },
+                  { key: 'daily', label: 'Daily', icon: '📅' },
+                  { key: 'weekly', label: 'Weekly', icon: '📆' },
+                  { key: 'yearly', label: 'Yearly', icon: '📊' },
+                ].map(({ key, label, icon }) => {
+                  const pricingItem = productPricing?.find((p: any) => p.durationType === key);
+                  if (!pricingItem) return null;
+                  
+                  return (
+                    <Button
+                      key={key}
+                      variant={booking.durationType === key ? "default" : "outline"}
+                      className={`h-auto p-3 flex flex-col items-center space-y-1 ${
+                        booking.durationType === key ? 'bg-rental-primary text-white' : ''
+                      }`}
+                      onClick={() => handleBookingChange('durationType', key)}
+                    >
+                      <span className="text-lg">{icon}</span>
+                      <span className="text-xs font-medium">{label}</span>
+                      <span className="text-xs opacity-75">${pricingItem.basePrice}</span>
+                    </Button>
+                  );
+                })}
               </div>
             </div>
             
@@ -298,6 +440,48 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
                 <h5 className="font-medium text-gray-900 mb-3">Price Breakdown</h5>
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
+                    <span className="text-gray-600">
+                      {booking.durationType === 'hourly' ? 'Hourly' : 
+                       booking.durationType === 'daily' ? 'Daily' : 
+                       booking.durationType === 'weekly' ? 'Weekly' : 'Yearly'} rate
+                    </span>
+                    <span className="text-gray-900">
+                      ${productPricing?.find((p: any) => p.durationType === booking.durationType)?.basePrice || 0}/
+                      {booking.durationType === 'hourly' ? 'hour' : 
+                       booking.durationType === 'daily' ? 'day' : 
+                       booking.durationType === 'weekly' ? 'week' : 'year'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Rental duration</span>
+                    <span className="text-gray-900">
+                      {booking.startDate && booking.endDate ? 
+                        (() => {
+                          const startDate = new Date(booking.startDate);
+                          const endDate = new Date(booking.endDate);
+                          const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
+                          const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                          const diffHours = Math.ceil(diffTime / (1000 * 60 * 60));
+                          const diffWeeks = Math.ceil(diffDays / 7);
+                          const diffYears = Math.ceil(diffDays / 365);
+                          
+                          switch(booking.durationType) {
+                            case 'hourly': return `${Math.max(1, diffHours)} hours`;
+                            case 'daily': return `${Math.max(1, diffDays)} days`;
+                            case 'weekly': return `${Math.max(1, diffWeeks)} weeks`;
+                            case 'yearly': return `${Math.max(1, diffYears)} years`;
+                            default: return `${Math.max(1, diffHours)} hours`;
+                          }
+                        })() : 
+                        'Select dates'
+                      }
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">Quantity</span>
+                    <span className="text-gray-900">{booking.quantity}</span>
+                  </div>
+                  <div className="flex justify-between">
                     <span className="text-gray-600">Base price</span>
                     <span className="text-gray-900">${pricing.basePrice.toFixed(2)}</span>
                   </div>
@@ -314,6 +498,9 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
                   <div className="border-t border-gray-200 pt-2 flex justify-between font-semibold">
                     <span className="text-gray-900">Total</span>
                     <span className="text-lg text-rental-primary">${pricing.total.toFixed(2)}</span>
+                  </div>
+                  <div className="mt-3 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
+                    <strong>Late Return Policy:</strong> $2.50/{booking.durationType === 'hourly' ? 'hour' : 'day'} fee for returns after scheduled end time
                   </div>
                 </div>
               </CardContent>
@@ -345,28 +532,37 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
             
             {/* Action Buttons */}
             <div className="space-y-3">
-              <Button
-                className="w-full bg-rental-primary hover:bg-blue-700"
-                onClick={handleProceedToCheckout}
-                disabled={
-                  createBookingMutation.isPending || 
-                  !booking.startDate || 
-                  !booking.endDate || 
-                  (availability && !availability.available)
-                }
-              >
-                {createBookingMutation.isPending ? (
-                  <div className="flex items-center">
-                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
-                    Creating Booking...
-                  </div>
-                ) : (
-                  'Get Quote & Continue'
-                )}
-              </Button>
-              <Button variant="outline" className="w-full">
-                <Heart className="w-4 h-4 mr-2" />
-                Save to Wishlist
+              {user?.id === product.ownerId ? (
+                <Button
+                  className="w-full bg-gray-400 text-white cursor-not-allowed"
+                  disabled
+                >
+                  Your Item - Cannot Book
+                </Button>
+              ) : (
+                <Button
+                  className="w-full bg-rental-primary hover:bg-blue-700"
+                  onClick={handleProceedToCheckout}
+                  disabled={
+                    createBookingMutation.isPending || 
+                    !booking.startDate || 
+                    !booking.endDate || 
+                    (availability && !availability.available)
+                  }
+                >
+                  {createBookingMutation.isPending ? (
+                    <div className="flex items-center">
+                      <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-2"></div>
+                      Creating Booking...
+                    </div>
+                  ) : (
+                    'Get Quote & Continue'
+                  )}
+                </Button>
+              )}
+              <Button variant="outline" className="w-full" onClick={handleWishlistToggle}>
+                <Heart className={`w-4 h-4 mr-2 ${wishlistStatus.isInWishlist ? 'text-red-500' : 'text-gray-500'}`} />
+                {wishlistStatus.isInWishlist ? 'Remove from Wishlist' : 'Save to Wishlist'}
               </Button>
             </div>
           </div>

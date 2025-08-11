@@ -9,6 +9,8 @@ import {
   durationOptions,
   statusConfig,
   businessConfig,
+  wishlist,
+  feedback,
   type User,
   type InsertUser,
   type Product,
@@ -23,6 +25,8 @@ import {
   type InsertBooking,
   type InsertProductPricing,
   type InsertNotification,
+  type Wishlist,
+  type Feedback,
 } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, gte, lte, desc, asc, sql, ilike, or } from "drizzle-orm";
@@ -79,6 +83,12 @@ export interface IStorage {
   createNotification(notification: InsertNotification): Promise<Notification>;
   markNotificationRead(id: string): Promise<void>;
   
+  // Wishlist operations
+  getWishlist(userId: string): Promise<Wishlist[]>;
+  addToWishlist(userId: string, productId: string): Promise<Wishlist>;
+  removeFromWishlist(userId: string, productId: string): Promise<void>;
+  isInWishlist(userId: string, productId: string): Promise<boolean>;
+  
   // Configuration operations
   getDurationOptions(): Promise<DurationOption[]>;
   getStatusConfig(): Promise<StatusConfig[]>;
@@ -100,6 +110,22 @@ export interface IStorage {
     itemsListed: number;
     joinDate: Date;
   }>;
+
+  // Admin operations
+  getAdminAnalytics(): Promise<any>;
+  getAllUsers(): Promise<User[]>;
+  getAllProducts(): Promise<any[]>;
+  getAllBookings(): Promise<any[]>;
+  getAllFeedback(): Promise<any[]>;
+  banUser(userId: string): Promise<void>;
+  unbanUser(userId: string): Promise<void>;
+  approveProduct(productId: string): Promise<void>;
+  rejectProduct(productId: string, reason: string): Promise<void>;
+  replyToFeedback(feedbackId: string, reply: string): Promise<void>;
+  archiveFeedback(feedbackId: string): Promise<void>;
+  makeUserAdmin(userId: string): Promise<void>;
+  getUserFeedback(userId: string): Promise<Feedback[]>;
+  createUserFeedback(userId: string, feedbackData: any): Promise<Feedback>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -392,6 +418,29 @@ export class DatabaseStorage implements IStorage {
     await db.update(notifications).set({ isRead: true }).where(eq(notifications.id, id));
   }
 
+  // Wishlist operations
+  async getWishlist(userId: string): Promise<Wishlist[]> {
+    return await db
+      .select()
+      .from(wishlist)
+      .where(eq(wishlist.userId, userId))
+      .orderBy(desc(wishlist.createdAt));
+  }
+
+  async addToWishlist(userId: string, productId: string): Promise<Wishlist> {
+    const [wishlistItem] = await db.insert(wishlist).values({ userId, productId }).returning();
+    return wishlistItem;
+  }
+
+  async removeFromWishlist(userId: string, productId: string): Promise<void> {
+    await db.delete(wishlist).where(and(eq(wishlist.userId, userId), eq(wishlist.productId, productId)));
+  }
+
+  async isInWishlist(userId: string, productId: string): Promise<boolean> {
+    const [wishlistItem] = await db.select().from(wishlist).where(and(eq(wishlist.userId, userId), eq(wishlist.productId, productId)));
+    return !!wishlistItem;
+  }
+
   // Configuration operations
   async getDurationOptions(): Promise<DurationOption[]> {
     return await db
@@ -547,6 +596,74 @@ export class DatabaseStorage implements IStorage {
         joinDate: new Date(),
       };
     }
+  }
+
+  // Admin operations
+  async getAdminAnalytics(): Promise<any> {
+    // Placeholder for admin analytics logic
+    return { message: 'Admin analytics not yet implemented' };
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return await db.select().from(users);
+  }
+
+  async getAllProducts(): Promise<any[]> {
+    return await db.select().from(products);
+  }
+
+  async getAllBookings(): Promise<any[]> {
+    return await db.select().from(bookings);
+  }
+
+  async getAllFeedback(): Promise<any[]> {
+    return await db.select().from(feedback);
+  }
+
+  async banUser(userId: string): Promise<void> {
+    await db.update(users).set({ isActive: false, updatedAt: new Date() }).where(eq(users.id, userId));
+  }
+
+  async unbanUser(userId: string): Promise<void> {
+    await db.update(users).set({ isActive: true, updatedAt: new Date() }).where(eq(users.id, userId));
+  }
+
+  async approveProduct(productId: string): Promise<void> {
+    await db.update(products).set({ isActive: true, updatedAt: new Date() }).where(eq(products.id, productId));
+  }
+
+  async rejectProduct(productId: string, reason: string): Promise<void> {
+    await db.update(products).set({ isActive: false, updatedAt: new Date() }).where(eq(products.id, productId));
+  }
+
+  async replyToFeedback(feedbackId: string, reply: string): Promise<void> {
+    await db.update(feedback).set({ adminReply: reply, updatedAt: new Date() }).where(eq(feedback.id, feedbackId));
+  }
+
+  async archiveFeedback(feedbackId: string): Promise<void> {
+    await db.update(feedback).set({ isArchived: true, updatedAt: new Date() }).where(eq(feedback.id, feedbackId));
+  }
+
+  async makeUserAdmin(userId: string): Promise<void> {
+    await db.update(users).set({ role: 'admin', updatedAt: new Date() }).where(eq(users.id, userId));
+  }
+
+  async getUserFeedback(userId: string): Promise<Feedback[]> {
+    return await db.select().from(feedback).where(eq(feedback.userId, userId)).orderBy(desc(feedback.createdAt));
+  }
+
+  async createUserFeedback(userId: string, feedbackData: any): Promise<Feedback> {
+    const result = await db.insert(feedback).values({
+      userId,
+      type: feedbackData.type,
+      subject: feedbackData.subject,
+      message: feedbackData.message,
+      sentiment: 'neutral',
+      status: 'open',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }).returning();
+    return result[0];
   }
 }
 

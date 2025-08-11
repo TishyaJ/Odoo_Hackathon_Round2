@@ -28,7 +28,7 @@ export const sessions = pgTable(
 // Enums
 export const userRoleEnum = pgEnum('user_role', ['customer', 'admin']);
 export const bookingStatusEnum = pgEnum('booking_status', ['reserved', 'confirmed', 'pickup', 'active', 'returned', 'late', 'cancelled']);
-export const durationTypeEnum = pgEnum('duration_type', ['hourly']);
+export const durationTypeEnum = pgEnum('duration_type', ['hourly', 'daily', 'weekly', 'monthly']);
 
 // User storage table (JWT + bcrypt authentication)
 export const users = pgTable("users", {
@@ -156,12 +156,37 @@ export const lateFees = pgTable("late_fees", {
 export const notifications = pgTable("notifications", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   userId: varchar("user_id").references(() => users.id).notNull(),
-  type: varchar("type", { length: 50 }).notNull(),
+  type: varchar("type", { length: 50 }).notNull(), // 'booking_confirmed', 'product_created', etc.
   title: varchar("title", { length: 200 }).notNull(),
   message: text("message").notNull(),
   isRead: boolean("is_read").default(false),
-  relatedId: varchar("related_id"), // booking_id, product_id, etc.
+  relatedId: varchar("related_id"), // ID of related booking, product, etc.
   createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Wishlist
+export const wishlist = pgTable("wishlist", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  productId: varchar("product_id").references(() => products.id).notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+}, (table) => [
+  index("IDX_wishlist_user_product").on(table.userId, table.productId),
+]);
+
+// Feedback
+export const feedback = pgTable("feedback", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  type: varchar("type", { length: 50 }).notNull(), // 'general', 'bug', 'feature', 'complaint'
+  subject: varchar("subject", { length: 200 }).notNull(),
+  message: text("message").notNull(),
+  sentiment: varchar("sentiment", { length: 20 }).default('neutral'), // 'positive', 'negative', 'neutral'
+  status: varchar("status", { length: 20 }).default('open'), // 'open', 'in_progress', 'resolved', 'archived'
+  adminReply: text("admin_reply"),
+  isArchived: boolean("is_archived").default(false),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // Relations
@@ -217,6 +242,24 @@ export const lateFeesRelations = relations(lateFees, ({ one }) => ({
 export const notificationsRelations = relations(notifications, ({ one }) => ({
   user: one(users, {
     fields: [notifications.userId],
+    references: [users.id],
+  }),
+}));
+
+export const wishlistRelations = relations(wishlist, ({ one, many }) => ({
+  user: one(users, {
+    fields: [wishlist.userId],
+    references: [users.id],
+  }),
+  product: one(products, {
+    fields: [wishlist.productId],
+    references: [products.id],
+  }),
+}));
+
+export const feedbackRelations = relations(feedback, ({ one }) => ({
+  user: one(users, {
+    fields: [feedback.userId],
     references: [users.id],
   }),
 }));
@@ -287,6 +330,8 @@ export type Notification = typeof notifications.$inferSelect;
 export type DurationOption = typeof durationOptions.$inferSelect;
 export type StatusConfig = typeof statusConfig.$inferSelect;
 export type BusinessConfig = typeof businessConfig.$inferSelect;
+export type Wishlist = typeof wishlist.$inferSelect;
+export type Feedback = typeof feedback.$inferSelect;
 
 export type InsertUser = typeof users.$inferInsert;
 export type InsertCategory = z.infer<typeof insertCategorySchema>;
@@ -294,3 +339,5 @@ export type InsertProduct = z.infer<typeof insertProductSchema>;
 export type InsertProductPricing = z.infer<typeof insertProductPricingSchema>;
 export type InsertBooking = z.infer<typeof insertBookingSchema>;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
+export type InsertWishlist = typeof wishlist.$inferInsert;
+export type InsertFeedback = typeof feedback.$inferInsert;

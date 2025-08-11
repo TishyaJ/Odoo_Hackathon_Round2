@@ -1,100 +1,186 @@
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
+import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import Navigation from "@/components/navigation";
-import AdminTimeline from "@/components/admin-timeline";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/queryClient";
-import { isUnauthorizedError } from "@/lib/authUtils";
-import { AlertTriangle, DollarSign, Clock, HandHeart, Package, TrendingUp } from "lucide-react";
+import Navigation from "@/components/navigation";
+import {
+  Users,
+  Building2,
+  Calendar,
+  DollarSign,
+  TrendingUp,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  Download,
+  Filter,
+  Search,
+  MessageSquare,
+  Star,
+  MapPin,
+  Clock,
+  BarChart3,
+  PieChart,
+  Activity,
+  Settings,
+  Eye,
+  Ban,
+  Archive,
+  Reply,
+  FileText,
+  Mail,
+  RefreshCw,
+  Package,
+  Bug,
+  Lightbulb,
+} from "lucide-react";
 
-export default function AdminDashboard() {
+interface AdminDashboardProps {}
+
+export default function AdminDashboard({}: AdminDashboardProps) {
   const { user, isLoading } = useAuth();
   const { toast } = useToast();
+  const [location, setLocation] = useLocation();
   const queryClient = useQueryClient();
-  const [selectedTab, setSelectedTab] = useState("overview");
+  
+  const [dateRange, setDateRange] = useState({ start: '', end: '' });
+  const [selectedCategory, setSelectedCategory] = useState('all');
+  const [selectedLocation, setSelectedLocation] = useState('all');
+  const [activeTab, setActiveTab] = useState('overview');
+  const [feedbackFilter, setFeedbackFilter] = useState('all');
+  const [selectedFeedback, setSelectedFeedback] = useState<any>(null);
+  const [replyText, setReplyText] = useState('');
 
-  // Redirect if not authenticated or not admin
-  useEffect(() => {
-    if (!isLoading && (!user || user.role !== 'admin')) {
-      toast({ title: "Unauthorized", description: "Admin access required. Redirecting...", variant: "destructive" });
-      setTimeout(() => { window.location.href = "/login"; }, 300);
-      return;
-    }
-  }, [user, isLoading, toast]);
-
-  const { data: adminStats = { activeRentals: 0, lateReturns: 0, monthlyRevenue: 0, pendingPickups: 0 } } = useQuery<{
-    activeRentals: number;
-    lateReturns: number;
-    monthlyRevenue: number;
-    pendingPickups: number;
-  }>({
+  // Fetch admin statistics
+  const { data: adminStats = {}, isLoading: statsLoading } = useQuery({
     queryKey: ["/api/admin/stats"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/admin/stats");
+      return response.json();
+    },
+    enabled: !!user && user.role === 'admin',
     retry: false,
   });
 
-  const { data: lateBookings = [] } = useQuery<any[]>({
-    queryKey: ["/api/admin/late-bookings"],
+  // Fetch all users
+  const { data: users = [], isLoading: usersLoading } = useQuery({
+    queryKey: ["/api/admin/users"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/admin/users");
+      return response.json();
+    },
+    enabled: !!user && user.role === 'admin',
     retry: false,
   });
 
-  const { data: allBookings = [] } = useQuery<any[]>({
-    queryKey: ["/api/bookings"],
+  // Fetch all products
+  const { data: products = [], isLoading: productsLoading } = useQuery({
+    queryKey: ["/api/admin/products"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/admin/products");
+      return response.json();
+    },
+    enabled: !!user && user.role === 'admin',
     retry: false,
   });
 
-  const { data: allProducts = [] } = useQuery<any[]>({
-    queryKey: ["/api/products"],
+  // Fetch all bookings
+  const { data: bookings = [], isLoading: bookingsLoading } = useQuery({
+    queryKey: ["/api/admin/bookings"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/admin/bookings");
+      return response.json();
+    },
+    enabled: !!user && user.role === 'admin',
     retry: false,
   });
 
-  const updateBookingStatusMutation = useMutation({
-    mutationFn: async ({ bookingId, status }: { bookingId: string; status: string }) => {
-      await apiRequest("PATCH", `/api/bookings/${bookingId}`, { status });
+  // Fetch categories
+  const { data: categories = [], isLoading: categoriesLoading } = useQuery({
+    queryKey: ["/api/categories"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/categories");
+      return response.json();
+    },
+    enabled: !!user && user.role === 'admin',
+    retry: false,
+  });
+
+  // Fetch feedback data
+  const { data: feedback = [], isLoading: feedbackLoading } = useQuery({
+    queryKey: ["/api/admin/feedback"],
+    queryFn: async () => {
+      const response = await apiRequest("GET", "/api/admin/feedback");
+      return response.json();
+    },
+    enabled: !!user && user.role === 'admin',
+    retry: false,
+  });
+
+  // Reply to feedback mutation
+  const replyToFeedbackMutation = useMutation({
+    mutationFn: async ({ feedbackId, reply }: { feedbackId: string; reply: string }) => {
+      const response = await apiRequest("POST", `/api/admin/feedback/${feedbackId}/reply`, { reply });
+      return response.json();
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/late-bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/feedback"] });
       toast({
-        title: "Success",
-        description: "Booking status updated successfully",
+        title: "Reply Sent",
+        description: "Your reply has been sent successfully.",
+      });
+      setSelectedFeedback(null);
+      setReplyText('');
+    },
+    onError: (error) => {
+      toast({
+        title: "Reply Failed",
+        description: "Failed to send reply. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Archive feedback mutation
+  const archiveFeedbackMutation = useMutation({
+    mutationFn: async (feedbackId: string) => {
+      const response = await apiRequest("PATCH", `/api/admin/feedback/${feedbackId}/archive`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/feedback"] });
+      toast({
+        title: "Feedback Archived",
+        description: "Feedback has been archived successfully.",
       });
     },
     onError: (error) => {
-      if (isUnauthorizedError(error as Error)) {
-        toast({ title: "Unauthorized", description: "You are logged out. Logging in again...", variant: "destructive" });
-        setTimeout(() => { window.location.href = "/login"; }, 300);
-        return;
-      }
-      toast({ title: "Error", description: "Failed to update booking status", variant: "destructive" });
+      toast({
+        title: "Archive Failed",
+        description: "Failed to archive feedback. Please try again.",
+        variant: "destructive",
+      });
     },
   });
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active':
-        return 'bg-status-rented text-white';
-      case 'reserved':
-        return 'bg-status-reserved text-white';
-      case 'returned':
-        return 'bg-status-returned text-white';
-      case 'late':
-        return 'bg-status-late text-white';
-      case 'confirmed':
-        return 'bg-status-available text-white';
-      default:
-        return 'bg-gray-500 text-white';
-    }
-  };
-
-  const handleUpdateBookingStatus = (bookingId: string, status: string) => {
-    updateBookingStatusMutation.mutate({ bookingId, status });
-  };
+  // Redirect if not admin
+  if (!isLoading && (!user || user.role !== 'admin')) {
+    setTimeout(() => {
+      window.location.href = "/";
+    }, 100);
+    return null;
+  }
 
   if (isLoading) {
     return (
@@ -104,320 +190,728 @@ export default function AdminDashboard() {
     );
   }
 
-  if (!user || user.role !== 'admin') {
-    return null;
-  }
-
   return (
     <div className="min-h-screen bg-gray-50">
       <Navigation />
       
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {/* Header */}
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-gray-900 mb-2">Admin Dashboard</h1>
-          <p className="text-gray-600">Manage bookings, products, and view analytics</p>
+          <p className="text-gray-600">Monitor and manage your rental platform</p>
         </div>
 
-        {/* Admin Stats */}
-        {adminStats && (
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-8">
-            <Card className="shadow-sm border border-gray-200">
-              <CardContent className="p-6">
-                <div className="flex items-center">
-                  <div className="bg-status-rented bg-opacity-10 rounded-full p-3">
-                    <HandHeart className="h-6 w-6 text-status-rented" />
-                  </div>
-                  <div className="ml-4">
-                    <p className="text-sm text-gray-600">Active Rentals</p>
-                    <p className="text-2xl font-bold text-gray-900">{adminStats.activeRentals}</p>
-                    <p className="text-xs text-green-600">+12% from last month</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+        {/* Filters */}
+        <div className="bg-white rounded-lg p-4 mb-8 shadow-sm">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center space-x-2">
+              <Filter className="w-4 h-4 text-gray-500" />
+              <span className="text-sm font-medium text-gray-700">Filters:</span>
+            </div>
             
-            <Card className="shadow-sm border border-gray-200">
-              <CardContent className="p-6">
-                <div className="flex items-center">
-                  <div className="bg-status-late bg-opacity-10 rounded-full p-3">
-                    <AlertTriangle className="h-6 w-6 text-status-late" />
-                  </div>
-                  <div className="ml-4">
-                    <p className="text-sm text-gray-600">Late Returns</p>
-                    <p className="text-2xl font-bold text-gray-900">{adminStats.lateReturns}</p>
-                    <p className="text-xs text-red-600">Requiring attention</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card className="shadow-sm border border-gray-200">
-              <CardContent className="p-6">
-                <div className="flex items-center">
-                  <div className="bg-green-500 bg-opacity-10 rounded-full p-3">
-                    <DollarSign className="h-6 w-6 text-green-600" />
-                  </div>
-                  <div className="ml-4">
-                    <p className="text-sm text-gray-600">Revenue (Month)</p>
-                    <p className="text-2xl font-bold text-gray-900">${adminStats.monthlyRevenue.toLocaleString()}</p>
-                    <p className="text-xs text-green-600">+8.2% vs last month</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-            
-            <Card className="shadow-sm border border-gray-200">
-              <CardContent className="p-6">
-                <div className="flex items-center">
-                  <div className="bg-status-reserved bg-opacity-10 rounded-full p-3">
-                    <Clock className="h-6 w-6 text-status-reserved" />
-                  </div>
-                  <div className="ml-4">
-                    <p className="text-sm text-gray-600">Pending Pickups</p>
-                    <p className="text-2xl font-bold text-gray-900">{adminStats.pendingPickups}</p>
-                    <p className="text-xs text-yellow-600">Next 24 hours</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <div>
+              <Label className="text-xs text-gray-600">Date Range</Label>
+              <div className="flex space-x-2">
+                <Input
+                  type="date"
+                  value={dateRange.start}
+                  onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
+                  className="w-32"
+                />
+                <Input
+                  type="date"
+                  value={dateRange.end}
+                  onChange={(e) => setDateRange(prev => ({ ...prev, end: e.target.value }))}
+                  className="w-32"
+                />
+              </div>
+            </div>
+
+            <div>
+              <Label className="text-xs text-gray-600">Category</Label>
+              <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Categories</SelectItem>
+                  <SelectItem value="vehicles">Vehicles</SelectItem>
+                  <SelectItem value="home-utilities">Home Utilities</SelectItem>
+                  <SelectItem value="entertainment">Entertainment</SelectItem>
+                  <SelectItem value="estate">Estate</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div>
+              <Label className="text-xs text-gray-600">Location</Label>
+              <Select value={selectedLocation} onValueChange={setSelectedLocation}>
+                <SelectTrigger className="w-32">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Locations</SelectItem>
+                  <SelectItem value="new-york">New York</SelectItem>
+                  <SelectItem value="los-angeles">Los Angeles</SelectItem>
+                  <SelectItem value="chicago">Chicago</SelectItem>
+                  <SelectItem value="miami">Miami</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Button variant="outline" size="sm">
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Refresh
+            </Button>
           </div>
-        )}
+        </div>
+
+        {/* KPI Cards */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Total Users</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {usersLoading ? "..." : users.length}
+                  </p>
+                  <p className="text-xs text-green-600">Registered users</p>
+                </div>
+                <Users className="w-8 h-8 text-blue-500" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Total Products</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {productsLoading ? "..." : products.length}
+                  </p>
+                  <p className="text-xs text-green-600">Listed items</p>
+                </div>
+                <Building2 className="w-8 h-8 text-green-500" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Active Rentals</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {bookingsLoading ? "..." : bookings.filter((b: any) => b.status === 'active').length}
+                  </p>
+                  <p className="text-xs text-blue-600">Currently active</p>
+                </div>
+                <Calendar className="w-8 h-8 text-purple-500" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-600">Total Revenue</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {bookingsLoading ? "..." : `$${bookings
+                      .filter((b: any) => ['active', 'returned', 'completed'].includes(b.status))
+                      .reduce((sum: number, b: any) => sum + parseFloat(b.totalAmount || 0), 0)
+                      .toFixed(2)}`}
+                  </p>
+                  <p className="text-xs text-green-600">From all rentals</p>
+                </div>
+                <DollarSign className="w-8 h-8 text-yellow-500" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Main Content Tabs */}
-        <Tabs value={selectedTab} onValueChange={setSelectedTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-4">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+          <TabsList className="grid w-full grid-cols-5">
             <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="bookings">Bookings</TabsTrigger>
-            <TabsTrigger value="products">Products</TabsTrigger>
             <TabsTrigger value="analytics">Analytics</TabsTrigger>
+            <TabsTrigger value="users">User Management</TabsTrigger>
+            <TabsTrigger value="products">Product Management</TabsTrigger>
+            <TabsTrigger value="feedback">Feedback</TabsTrigger>
           </TabsList>
 
+          {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
-            {/* Booking Timeline */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center justify-between">
-                  <span>Booking Timeline</span>
-                  <div className="flex space-x-2">
-                    <Button variant="outline" size="sm">Today</Button>
-                    <Button variant="outline" size="sm">Week</Button>
-                    <Button size="sm" className="bg-rental-primary hover:bg-blue-700">Month</Button>
-                  </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <AdminTimeline bookings={allBookings || []} onUpdateStatus={handleUpdateBookingStatus} />
-              </CardContent>
-            </Card>
-
-            <div className="grid md:grid-cols-2 gap-6">
-              {/* Recent Products */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span>Recent Products</span>
-                    <Button size="sm" className="bg-rental-primary hover:bg-blue-700">
-                      <Package className="h-4 w-4 mr-2" />
-                      Manage Products
-                    </Button>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {allProducts?.slice(0, 5).map((product: any) => (
-                    <div key={product.id} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0">
-                      <div className="flex items-center space-x-3">
-                        <div className="w-12 h-12 bg-gray-200 rounded-lg flex items-center justify-center">
-                          {product.images?.[0] ? (
-                            <img src={product.images[0]} alt={product.name} className="w-12 h-12 rounded-lg object-cover" />
-                          ) : (
-                            <Package className="h-6 w-6 text-gray-400" />
-                          )}
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900">{product.name}</p>
-                          <p className="text-sm text-gray-500">{product.location || 'No location'}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <Badge className="bg-status-available text-white">
-                          Available
-                        </Badge>
-                        <Button variant="ghost" size="sm">
-                          <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                          </svg>
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </CardContent>
-              </Card>
-
-              {/* Late Returns */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center">
-                    <AlertTriangle className="h-5 w-5 text-status-late mr-2" />
-                    Late Returns
+                    <TrendingUp className="w-5 h-5 mr-2" />
+                    User Registration Trends
                   </CardTitle>
                 </CardHeader>
                 <CardContent>
-                  {lateBookings?.length === 0 ? (
-                    <div className="text-center py-8">
-                      <div className="text-gray-400 mb-2">
-                        <Clock className="h-12 w-12 mx-auto" />
-                      </div>
-                      <p className="text-gray-600">No late returns</p>
-                      <p className="text-sm text-gray-500">All rentals are on time!</p>
+                  <div className="h-64 bg-gray-100 rounded-lg flex items-center justify-center">
+                    <p className="text-gray-500">Chart placeholder - User registration trends</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <DollarSign className="w-5 h-5 mr-2" />
+                    Revenue Trends
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-64 bg-gray-100 rounded-lg flex items-center justify-center">
+                    <p className="text-gray-500">Chart placeholder - Revenue trends</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <PieChart className="w-5 h-5 mr-2" />
+                    Popular Categories
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {categoriesLoading ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3, 4].map((i) => (
+                        <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg animate-pulse">
+                          <div className="flex items-center">
+                            <div className="w-3 h-3 bg-gray-300 rounded-full mr-3"></div>
+                            <div className="h-4 bg-gray-300 rounded w-24"></div>
+                          </div>
+                          <div className="text-right">
+                            <div className="h-4 bg-gray-300 rounded w-12 mb-1"></div>
+                            <div className="h-3 bg-gray-300 rounded w-16"></div>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   ) : (
-                    lateBookings?.map((booking: any) => (
-                      <div key={booking.id} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-12 h-12 bg-gray-200 rounded-lg flex items-center justify-center">
-                            <Package className="h-6 w-6 text-gray-400" />
+                    <div className="space-y-3">
+                      {(() => {
+                        const categoryStats = categories.map((category: any) => {
+                          const categoryProducts = products.filter((p: any) => p.categoryId === category.id);
+                          const categoryBookings = bookings.filter((b: any) => 
+                            categoryProducts.some((p: any) => p.id === b.productId)
+                          );
+                          return {
+                            ...category,
+                            productCount: categoryProducts.length,
+                            bookingCount: categoryBookings.length
+                          };
+                        }).sort((a: any, b: any) => b.bookingCount - a.bookingCount).slice(0, 4);
+
+                        const totalBookings = categoryStats.reduce((sum: number, cat: any) => sum + cat.bookingCount, 0);
+                        const colors = ['blue', 'green', 'yellow', 'orange'];
+
+                        return categoryStats.map((category: any, index: number) => {
+                          const percentage = totalBookings > 0 ? Math.round((category.bookingCount / totalBookings) * 100) : 0;
+                          const color = colors[index] || 'gray';
+                          
+                          return (
+                            <div key={category.id} className={`flex items-center justify-between p-3 bg-${color}-50 rounded-lg`}>
+                              <div className="flex items-center">
+                                <div className={`w-3 h-3 bg-${color}-500 rounded-full mr-3`}></div>
+                                <span className="font-medium">{category.name}</span>
+                              </div>
+                              <div className="text-right">
+                                <p className={`font-bold text-${color}-600`}>{percentage}%</p>
+                                <p className="text-xs text-gray-500">{category.bookingCount} rentals</p>
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <BarChart3 className="w-5 h-5 mr-2" />
+                    Top Revenue Products
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {productsLoading || bookingsLoading ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3, 4, 5].map((i) => (
+                        <div key={i} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg animate-pulse">
+                          <div className="flex items-center">
+                            <div className="w-6 h-6 bg-gray-300 rounded-full mr-3"></div>
+                            <div>
+                              <div className="h-4 bg-gray-300 rounded w-32 mb-1"></div>
+                              <div className="h-3 bg-gray-300 rounded w-20"></div>
+                            </div>
                           </div>
-                          <div>
-                            <p className="font-medium text-gray-900">Booking #{booking.id.slice(-8)}</p>
-                            <p className="text-sm text-gray-500">Customer: {booking.customerId.slice(-8)}</p>
-                            <p className="text-xs text-status-late">
-                              {Math.ceil((new Date().getTime() - new Date(booking.endDate).getTime()) / (1000 * 60 * 60 * 24))} days overdue
-                            </p>
+                          <div className="text-right">
+                            <div className="h-4 bg-gray-300 rounded w-16"></div>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-sm font-bold text-status-late">
-                            +${((parseFloat(booking.basePrice) * 0.05) * Math.ceil((new Date().getTime() - new Date(booking.endDate).getTime()) / (1000 * 60 * 60 * 24))).toFixed(2)}
-                          </p>
-                          <p className="text-xs text-gray-500">Late fee (5%/day)</p>
-                          <Button size="sm" variant="destructive" className="mt-1">
-                            Contact
-                          </Button>
-                        </div>
-                      </div>
-                    ))
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {(() => {
+                        const productRevenue = products.map((product: any) => {
+                          const productBookings = bookings.filter((b: any) => b.productId === product.id);
+                          const totalRevenue = productBookings
+                            .filter((b: any) => ['active', 'returned', 'completed'].includes(b.status))
+                            .reduce((sum: number, b: any) => sum + parseFloat(b.totalAmount || 0), 0);
+                          return {
+                            ...product,
+                            bookingCount: productBookings.length,
+                            totalRevenue
+                          };
+                        })
+                        .filter((p: any) => p.totalRevenue > 0)
+                        .sort((a: any, b: any) => b.totalRevenue - a.totalRevenue)
+                        .slice(0, 5);
+
+                        const colors = ['blue', 'green', 'yellow', 'orange', 'purple'];
+
+                        return productRevenue.map((product: any, index: number) => {
+                          const color = colors[index] || 'gray';
+                          
+                          return (
+                            <div key={product.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                              <div className="flex items-center">
+                                <span className={`w-6 h-6 bg-${color}-500 text-white rounded-full flex items-center justify-center text-xs font-bold mr-3`}>
+                                  {index + 1}
+                                </span>
+                                <div>
+                                  <p className="font-medium text-gray-900">{product.name}</p>
+                                  <p className="text-sm text-gray-500">{product.bookingCount} rentals</p>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="font-bold text-green-600">${product.totalRevenue.toFixed(2)}</p>
+                              </div>
+                            </div>
+                          );
+                        });
+                      })()}
+                    </div>
                   )}
                 </CardContent>
               </Card>
             </div>
           </TabsContent>
 
-          <TabsContent value="bookings" className="space-y-6">
+          {/* Analytics Tab */}
+          <TabsContent value="analytics" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>All Bookings</CardTitle>
+                <CardTitle>Analytics Dashboard</CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {allBookings?.map((booking: any) => (
-                    <div key={booking.id} className="flex items-center justify-between p-4 border border-gray-200 rounded-lg">
-                      <div className="flex items-center space-x-4">
-                        <div className="w-12 h-12 bg-gray-200 rounded-lg flex items-center justify-center">
-                          <Package className="h-6 w-6 text-gray-400" />
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900">Booking #{booking.id.slice(-8)}</p>
-                          <p className="text-sm text-gray-500">
-                            {new Date(booking.startDate).toLocaleDateString()} - {new Date(booking.endDate).toLocaleDateString()}
-                          </p>
-                          <p className="text-sm text-gray-500">Amount: ${booking.totalAmount}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center space-x-3">
-                        <Badge className={getStatusColor(booking.status)}>
-                          {booking.status}
-                        </Badge>
-                        <div className="flex space-x-1">
-                          {booking.status === 'confirmed' && (
-                            <Button 
-                              size="sm" 
-                              onClick={() => handleUpdateBookingStatus(booking.id, 'active')}
-                              className="bg-status-rented hover:bg-blue-700 text-white"
-                            >
-                              Mark Picked Up
-                            </Button>
-                          )}
-                          {booking.status === 'active' && (
-                            <Button 
-                              size="sm" 
-                              onClick={() => handleUpdateBookingStatus(booking.id, 'returned')}
-                              className="bg-status-returned hover:bg-purple-700 text-white"
-                            >
-                              Mark Returned
-                            </Button>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
+                <p className="text-gray-500">Analytics content coming soon...</p>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* User Management Tab */}
+          <TabsContent value="users" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span>User Management</span>
+                  <div className="flex items-center space-x-2">
+                    <Input placeholder="Search users..." className="w-64" />
+                    <Button variant="outline" size="sm">
+                      <Search className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left p-2">User</th>
+                        <th className="text-left p-2">Email</th>
+                        <th className="text-left p-2">Role</th>
+                        <th className="text-left p-2">Status</th>
+                        <th className="text-left p-2">Join Date</th>
+                        <th className="text-left p-2">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {usersLoading ? (
+                        <tr>
+                          <td colSpan={6} className="p-4 text-center">
+                            <div className="animate-spin w-6 h-6 border-4 border-rental-primary border-t-transparent rounded-full mx-auto"></div>
+                          </td>
+                        </tr>
+                      ) : users.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-4 text-center text-gray-500">
+                            No users found
+                          </td>
+                        </tr>
+                      ) : (
+                        users.map((user: any) => {
+                          const initials = `${user.firstName?.charAt(0) || ''}${user.lastName?.charAt(0) || ''}`.toUpperCase();
+                          const isBanned = !user.isActive;
+                          
+                          return (
+                            <tr key={user.id} className="border-b hover:bg-gray-50">
+                              <td className="p-2">
+                                <div className="flex items-center">
+                                  <div className="w-8 h-8 bg-gray-300 rounded-full flex items-center justify-center mr-2">
+                                    <span className="text-xs font-medium">{initials}</span>
+                                  </div>
+                                  <span>{user.firstName} {user.lastName}</span>
+                                </div>
+                              </td>
+                              <td className="p-2">{user.email}</td>
+                              <td className="p-2">
+                                <Badge variant={user.role === 'admin' ? 'default' : 'secondary'}>
+                                  {user.role}
+                                </Badge>
+                              </td>
+                              <td className="p-2">
+                                <Badge variant={isBanned ? 'destructive' : 'default'}>
+                                  {isBanned ? 'Banned' : 'Active'}
+                                </Badge>
+                              </td>
+                              <td className="p-2">
+                                {new Date(user.createdAt).toLocaleDateString()}
+                              </td>
+                              <td className="p-2">
+                                <div className="flex items-center space-x-2">
+                                  <Button variant="outline" size="sm">
+                                    <Eye className="w-4 h-4" />
+                                  </Button>
+                                  {user.role !== 'admin' && (
+                                    isBanned ? (
+                                      <Button variant="outline" size="sm">
+                                        <CheckCircle className="w-4 h-4" />
+                                      </Button>
+                                    ) : (
+                                      <Button variant="destructive" size="sm">
+                                        <Ban className="w-4 h-4" />
+                                      </Button>
+                                    )
+                                  )}
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
 
+          {/* Product Management Tab */}
           <TabsContent value="products" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Product Management</CardTitle>
+                <CardTitle className="flex items-center justify-between">
+                  <span>Product Management</span>
+                  <div className="flex items-center space-x-2">
+                    <Input placeholder="Search products..." className="w-64" />
+                    <Button variant="outline" size="sm">
+                      <Search className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                  {allProducts?.map((product: any) => (
-                    <div key={product.id} className="border border-gray-200 rounded-lg p-4">
-                      <div className="aspect-video bg-gray-200 rounded-lg mb-3 flex items-center justify-center">
-                        {product.images?.[0] ? (
-                          <img src={product.images[0]} alt={product.name} className="w-full h-full object-cover rounded-lg" />
-                        ) : (
-                          <Package className="h-8 w-8 text-gray-400" />
-                        )}
-                      </div>
-                      <h3 className="font-medium text-gray-900 mb-1">{product.name}</h3>
-                      <p className="text-sm text-gray-500 mb-2">{product.location}</p>
-                      <div className="flex items-center justify-between">
-                        <Badge className="bg-status-available text-white">
-                          Available
-                        </Badge>
-                        <Button variant="ghost" size="sm">
-                          <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
-                            <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
-                          </svg>
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left p-2">Product</th>
+                        <th className="text-left p-2">Owner</th>
+                        <th className="text-left p-2">Category</th>
+                        <th className="text-left p-2">Status</th>
+                        <th className="text-left p-2">Price</th>
+                        <th className="text-left p-2">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {productsLoading ? (
+                        <tr>
+                          <td colSpan={6} className="p-4 text-center">
+                            <div className="animate-spin w-6 h-6 border-4 border-rental-primary border-t-transparent rounded-full mx-auto"></div>
+                          </td>
+                        </tr>
+                      ) : products.length === 0 ? (
+                        <tr>
+                          <td colSpan={6} className="p-4 text-center text-gray-500">
+                            No products found
+                          </td>
+                        </tr>
+                      ) : (
+                        products.map((product: any) => {
+                          const owner = users.find((u: any) => u.id === product.ownerId);
+                          const category = categories.find((c: any) => c.id === product.categoryId);
+                          
+                          return (
+                            <tr key={product.id} className="border-b hover:bg-gray-50">
+                              <td className="p-2">
+                                <div className="flex items-center">
+                                  <div className="w-8 h-8 bg-gray-200 rounded mr-2 flex items-center justify-center">
+                                    <Package className="w-4 h-4 text-gray-500" />
+                                  </div>
+                                  <span className="font-medium">{product.name}</span>
+                                </div>
+                              </td>
+                              <td className="p-2">{owner ? `${owner.firstName} ${owner.lastName}` : 'Unknown'}</td>
+                              <td className="p-2">
+                                <Badge variant="outline">{category?.name || 'Uncategorized'}</Badge>
+                              </td>
+                              <td className="p-2">
+                                <Badge variant={product.isActive ? 'default' : 'secondary'}>
+                                  {product.isActive ? 'Active' : 'Inactive'}
+                                </Badge>
+                              </td>
+                              <td className="p-2">
+                                {product.pricing && product.pricing.length > 0 
+                                  ? `$${product.pricing[0].price}/${product.pricing[0].durationType}`
+                                  : 'N/A'
+                                }
+                              </td>
+                              <td className="p-2">
+                                <div className="flex items-center space-x-2">
+                                  <Button variant="outline" size="sm">
+                                    <Eye className="w-4 h-4" />
+                                  </Button>
+                                  {!product.isActive && (
+                                    <Button variant="default" size="sm">
+                                      <CheckCircle className="w-4 h-4" />
+                                    </Button>
+                                  )}
+                                  <Dialog>
+                                    <DialogTrigger asChild>
+                                      <Button variant="destructive" size="sm">
+                                        <XCircle className="w-4 h-4" />
+                                      </Button>
+                                    </DialogTrigger>
+                                    <DialogContent>
+                                      <DialogHeader>
+                                        <DialogTitle>Reject Product</DialogTitle>
+                                      </DialogHeader>
+                                      <div className="space-y-4">
+                                        <Label>Reason for rejection:</Label>
+                                        <Textarea placeholder="Enter reason..." />
+                                        <Button>
+                                          Reject Product
+                                        </Button>
+                                      </div>
+                                    </DialogContent>
+                                  </Dialog>
+                                </div>
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="analytics" className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <TrendingUp className="h-5 w-5 mr-2" />
-                    Revenue Analytics
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center py-8">
-                    <p className="text-gray-600">Revenue analytics would be displayed here</p>
-                    <p className="text-sm text-gray-500">Integration with charting library needed</p>
-                  </div>
-                </CardContent>
-              </Card>
+          {/* Feedback Tab */}
+          <TabsContent value="feedback" className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* Feedback Statistics */}
+              <div className="lg:col-span-1">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center">
+                      <MessageSquare className="w-5 h-5 mr-2" />
+                      Feedback Statistics
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600">Total Feedback</span>
+                        <span className="font-bold">{feedback.length}</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600">Pending</span>
+                        <span className="font-bold text-yellow-600">
+                          {feedback.filter((f: any) => f.status === 'pending').length}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600">Resolved</span>
+                        <span className="font-bold text-green-600">
+                          {feedback.filter((f: any) => f.status === 'resolved').length}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600">Urgent</span>
+                        <span className="font-bold text-red-600">
+                          {feedback.filter((f: any) => f.priority === 'urgent').length}
+                        </span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm text-gray-600">Archived</span>
+                        <span className="font-bold text-gray-600">
+                          {feedback.filter((f: any) => f.isArchived).length}
+                        </span>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
 
-              <Card>
-                <CardHeader>
-                  <CardTitle>Popular Items</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-center py-8">
-                    <p className="text-gray-600">Popular items analytics would be displayed here</p>
-                    <p className="text-sm text-gray-500">Based on booking frequency</p>
-                  </div>
-                </CardContent>
-              </Card>
+              {/* Feedback List */}
+              <div className="lg:col-span-2">
+                <Card>
+                  <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                      <span>Feedback Management</span>
+                      <div className="flex items-center space-x-2">
+                        <Select value={feedbackFilter} onValueChange={setFeedbackFilter}>
+                          <SelectTrigger className="w-32">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="all">All</SelectItem>
+                            <SelectItem value="pending">Pending</SelectItem>
+                            <SelectItem value="resolved">Resolved</SelectItem>
+                            <SelectItem value="urgent">Urgent</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button variant="outline" size="sm">
+                          <Download className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    {feedbackLoading ? (
+                      <div className="flex items-center justify-center py-8">
+                        <div className="animate-spin w-8 h-8 border-4 border-rental-primary border-t-transparent rounded-full" />
+                      </div>
+                    ) : feedback.length === 0 ? (
+                      <div className="text-center py-8 text-gray-500">
+                        <MessageSquare className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                        <p>No feedback received yet</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4 max-h-96 overflow-y-auto">
+                        {feedback
+                          .filter((f: any) => {
+                            if (feedbackFilter === 'all') return true;
+                            if (feedbackFilter === 'pending') return f.status === 'pending';
+                            if (feedbackFilter === 'resolved') return f.status === 'resolved';
+                            if (feedbackFilter === 'urgent') return f.priority === 'urgent';
+                            return true;
+                          })
+                          .map((feedbackItem: any) => (
+                            <div key={feedbackItem.id} className="border rounded-lg p-4">
+                              <div className="flex items-start justify-between mb-2">
+                                <div className="flex items-center space-x-2">
+                                  <div className="flex items-center">
+                                    {feedbackItem.type === 'bug' && <Bug className="w-4 h-4 text-red-500" />}
+                                    {feedbackItem.type === 'feature' && <Lightbulb className="w-4 h-4 text-green-500" />}
+                                    {feedbackItem.type === 'complaint' && <AlertTriangle className="w-4 h-4 text-orange-500" />}
+                                    {feedbackItem.type === 'other' && <MessageSquare className="w-4 h-4 text-gray-500" />}
+                                  </div>
+                                  <span className="font-medium">{feedbackItem.user?.firstName || 'Anonymous'}</span>
+                                  <Badge variant={feedbackItem.priority === 'urgent' ? 'destructive' : 'secondary'}>
+                                    {feedbackItem.priority}
+                                  </Badge>
+                                </div>
+                                <span className="text-sm text-gray-500">
+                                  {new Date(feedbackItem.createdAt).toLocaleDateString()}
+                                </span>
+                              </div>
+                              <p className="text-gray-700 mb-2">{feedbackItem.message}</p>
+                              {feedbackItem.adminReply && (
+                                <div className="bg-blue-50 p-3 rounded-lg mb-2">
+                                  <p className="text-sm text-blue-800">
+                                    <strong>Admin Reply:</strong> {feedbackItem.adminReply}
+                                  </p>
+                                </div>
+                              )}
+                              <div className="flex items-center space-x-2">
+                                <Dialog>
+                                  <DialogTrigger asChild>
+                                    <Button 
+                                      variant="outline" 
+                                      size="sm"
+                                      onClick={() => setSelectedFeedback(feedbackItem)}
+                                    >
+                                      <Reply className="w-4 h-4 mr-1" />
+                                      Reply
+                                    </Button>
+                                  </DialogTrigger>
+                                  <DialogContent>
+                                    <DialogHeader>
+                                      <DialogTitle>Reply to Feedback</DialogTitle>
+                                    </DialogHeader>
+                                    <div className="space-y-4">
+                                      <div>
+                                        <Label>Original Feedback:</Label>
+                                        <p className="text-sm text-gray-600 mt-1">{selectedFeedback?.message}</p>
+                                      </div>
+                                      <div>
+                                        <Label>Your Reply:</Label>
+                                        <Textarea 
+                                          placeholder="Enter your reply..." 
+                                          value={replyText}
+                                          onChange={(e) => setReplyText(e.target.value)}
+                                        />
+                                      </div>
+                                      <Button 
+                                        onClick={() => {
+                                          if (selectedFeedback && replyText.trim()) {
+                                            replyToFeedbackMutation.mutate({
+                                              feedbackId: selectedFeedback.id,
+                                              reply: replyText.trim()
+                                            });
+                                          }
+                                        }}
+                                        disabled={replyToFeedbackMutation.isPending}
+                                      >
+                                        {replyToFeedbackMutation.isPending ? 'Sending...' : 'Send Reply'}
+                                      </Button>
+                                    </div>
+                                  </DialogContent>
+                                </Dialog>
+                                <Button 
+                                  variant="outline" 
+                                  size="sm"
+                                  onClick={() => archiveFeedbackMutation.mutate(feedbackItem.id)}
+                                  disabled={archiveFeedbackMutation.isPending}
+                                >
+                                  <Archive className="w-4 h-4 mr-1" />
+                                  Archive
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              </div>
             </div>
           </TabsContent>
         </Tabs>
