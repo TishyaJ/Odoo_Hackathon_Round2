@@ -24,7 +24,7 @@ export default function CloudinaryUpload({ onSuccess }: CloudinaryUploadProps) {
   const [productForm, setProductForm] = useState({
     name: '',
     description: '',
-    categoryId: '',
+    categoryId: 'none',
     location: '',
     availableFrom: '',
     availableUntil: '',
@@ -65,21 +65,11 @@ export default function CloudinaryUpload({ onSuccess }: CloudinaryUploadProps) {
     },
     onError: (error) => {
       if (isUnauthorizedError(error as Error)) {
-        toast({
-          title: "Unauthorized",
-          description: "You are logged out. Logging in again...",
-          variant: "destructive",
-        });
-        setTimeout(() => {
-          window.location.href = "/api/login";
-        }, 500);
+        toast({ title: "Unauthorized", description: "You are logged out. Logging in again...", variant: "destructive" });
+        setTimeout(() => { window.location.href = "/login"; }, 300);
         return;
       }
-      toast({
-        title: "Failed to Create Product",
-        description: "Please check your information and try again.",
-        variant: "destructive",
-      });
+      toast({ title: "Failed to Create Product", description: "Please check your information and try again.", variant: "destructive" });
     },
   });
 
@@ -286,10 +276,9 @@ export default function CloudinaryUpload({ onSuccess }: CloudinaryUploadProps) {
               <SelectValue placeholder="Select Category" />
             </SelectTrigger>
             <SelectContent>
+              <SelectItem value="none">Select Category</SelectItem>
               {categories?.map((category: any) => (
-                <SelectItem key={category.id} value={category.id}>
-                  {category.name}
-                </SelectItem>
+                <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>
               ))}
             </SelectContent>
           </Select>

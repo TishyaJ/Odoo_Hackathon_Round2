@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 
 export default function Navigation() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [location] = useLocation();
 
   const { data: notifications = [] } = useQuery<any[]>({
@@ -31,25 +31,17 @@ export default function Navigation() {
             
             <div className="hidden md:flex items-center space-x-6 ml-8">
               <Link href="/">
-                <Button variant={location === "/" ? "default" : "ghost"} size="sm">
-                  Dashboard
-                </Button>
+                <Button variant={location === "/" ? "default" : "ghost"} size="sm">Dashboard</Button>
               </Link>
               <Link href="/products">
-                <Button variant={location === "/products" ? "default" : "ghost"} size="sm">
-                  Products
-                </Button>
+                <Button variant={location === "/products" ? "default" : "ghost"} size="sm">Products</Button>
               </Link>
               <Link href="/bookings">
-                <Button variant={location === "/bookings" ? "default" : "ghost"} size="sm">
-                  My Bookings
-                </Button>
+                <Button variant={location === "/bookings" ? "default" : "ghost"} size="sm">My Bookings</Button>
               </Link>
               {user?.role === 'admin' && (
                 <Link href="/admin">
-                  <Button variant={location === "/admin" ? "default" : "ghost"} size="sm">
-                    Admin
-                  </Button>
+                  <Button variant={location === "/admin" ? "default" : "ghost"} size="sm">Admin</Button>
                 </Link>
               )}
             </div>
@@ -58,12 +50,8 @@ export default function Navigation() {
           <div className="flex items-center space-x-4">
             <div className="hidden md:flex items-center space-x-2">
               <span className="text-sm text-gray-600">Welcome back,</span>
-              <span className="text-sm font-medium text-gray-900">
-                {user?.firstName || user?.email || 'User'}
-              </span>
-              <Badge variant="secondary" className="bg-rental-primary text-white">
-                {user?.role || 'Customer'}
-              </Badge>
+              <span className="text-sm font-medium text-gray-900">{user?.firstName || user?.email || 'User'}</span>
+              <Badge variant="secondary" className="bg-rental-primary text-white">{user?.role || 'Customer'}</Badge>
             </div>
             
             <div className="relative">
@@ -72,18 +60,12 @@ export default function Navigation() {
                   <path d="M10 2a6 6 0 00-6 6v3.586l-.707.707A1 1 0 004 14h12a1 1 0 00.707-1.707L16 11.586V8a6 6 0 00-6-6zM10 18a3 3 0 01-3-3h6a3 3 0 01-3 3z" />
                 </svg>
                 {unreadCount > 0 && (
-                  <Badge className="absolute -top-1 -right-1 bg-red-500 text-white text-xs h-5 w-5 rounded-full flex items-center justify-center p-0">
-                    {unreadCount}
-                  </Badge>
+                  <Badge className="absolute -top-1 -right-1 bg-red-500 text-white text-xs h-5 w-5 rounded-full flex items-center justify-center p-0">{unreadCount}</Badge>
                 )}
               </Button>
             </div>
             
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => window.location.href = '/api/logout'}
-            >
+            <Button variant="ghost" size="sm" onClick={logout}>
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" />
               </svg>

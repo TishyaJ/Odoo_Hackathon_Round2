@@ -22,14 +22,14 @@ export default function Products() {
   const [showAddProductModal, setShowAddProductModal] = useState(false);
   const [filters, setFilters] = useState({
     searchQuery: "",
-    categoryId: "",
+    categoryId: "all",
     minPrice: "",
     maxPrice: "",
     location: "",
-    availability: "",
+    availability: "any",
   });
 
-  // Redirect to home if not authenticated
+  // Redirect to login if not authenticated
   useEffect(() => {
     if (!isLoading && !user) {
       toast({
@@ -38,8 +38,8 @@ export default function Products() {
         variant: "destructive",
       });
       setTimeout(() => {
-        window.location.href = "/api/login";
-      }, 500);
+        window.location.href = "/login";
+      }, 300);
       return;
     }
   }, [user, isLoading, toast]);
@@ -52,10 +52,13 @@ export default function Products() {
   const { data: products = [], refetch: refetchProducts } = useQuery<any[]>({
     queryKey: ["/api/products", filters],
     queryFn: ({ queryKey }) => {
-      const [url, filterParams] = queryKey;
+      const [url, filterParams] = queryKey as [string, typeof filters];
       const searchParams = new URLSearchParams();
-      Object.entries(filterParams as any).forEach(([key, value]) => {
-        if (value) searchParams.append(key, value as string);
+      Object.entries(filterParams).forEach(([key, value]) => {
+        if (!value) return;
+        if (key === "categoryId" && value === "all") return;
+        if (key === "availability" && value === "any") return;
+        searchParams.append(key, value as string);
       });
       return fetch(`${url}?${searchParams}`).then(res => res.json());
     },
@@ -87,7 +90,6 @@ export default function Products() {
   return (
     <div className="min-h-screen bg-gray-50">
       <Navigation />
-      
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="mb-8">
           <div className="flex justify-between items-center mb-4">
@@ -112,10 +114,7 @@ export default function Products() {
                   <CloudinaryUpload onSuccess={() => {
                     setShowAddProductModal(false);
                     refetchProducts();
-                    toast({
-                      title: "Success",
-                      description: "Product added successfully!",
-                    });
+                    toast({ title: "Success", description: "Product added successfully!" });
                   }} />
                 </DialogContent>
               </Dialog>
@@ -132,12 +131,7 @@ export default function Products() {
                   <svg className="w-5 h-5 absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
                     <path fillRule="evenodd" d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z" clipRule="evenodd" />
                   </svg>
-                  <Input
-                    placeholder="Search for items..."
-                    className="pl-10"
-                    value={filters.searchQuery}
-                    onChange={(e) => handleFilterChange("searchQuery", e.target.value)}
-                  />
+                  <Input placeholder="Search for items..." className="pl-10" value={filters.searchQuery} onChange={(e) => handleFilterChange("searchQuery", e.target.value)} />
                 </div>
               </div>
               <div>
@@ -146,7 +140,7 @@ export default function Products() {
                     <SelectValue placeholder="All Categories" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Categories</SelectItem>
+                    <SelectItem value="all">All Categories</SelectItem>
                     {categories?.map((category: any) => (
                       <SelectItem key={category.id} value={category.id}>
                         {category.name}
@@ -161,20 +155,16 @@ export default function Products() {
                     <SelectValue placeholder="Availability" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Any</SelectItem>
+                    <SelectItem value="any">Any</SelectItem>
                     <SelectItem value="available">Available Now</SelectItem>
                     <SelectItem value="upcoming">Available Soon</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
             </div>
-            
+
             <div className="mt-4">
-              <Button
-                variant="ghost"
-                onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
-                className="text-rental-primary hover:text-rental-primary"
-              >
+              <Button variant="ghost" onClick={() => setShowAdvancedFilters(!showAdvancedFilters)} className="text-rental-primary hover:text-rental-primary">
                 <svg className="w-4 h-4 mr-2" fill="currentColor" viewBox="0 0 20 20">
                   <path fillRule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v3a1 1 0 01-.293.707L12 11.414V15a1 1 0 01-.293.707l-2 2A1 1 0 018 17v-5.586L3.293 6.707A1 1 0 013 6V3z" clipRule="evenodd" />
                 </svg>
@@ -187,28 +177,14 @@ export default function Products() {
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Price Range</label>
                   <div className="flex items-center space-x-2">
-                    <Input
-                      type="number"
-                      placeholder="Min"
-                      value={filters.minPrice}
-                      onChange={(e) => handleFilterChange("minPrice", e.target.value)}
-                    />
+                    <Input type="number" placeholder="Min" value={filters.minPrice} onChange={(e) => handleFilterChange("minPrice", e.target.value)} />
                     <span className="text-gray-500">-</span>
-                    <Input
-                      type="number"
-                      placeholder="Max"
-                      value={filters.maxPrice}
-                      onChange={(e) => handleFilterChange("maxPrice", e.target.value)}
-                    />
+                    <Input type="number" placeholder="Max" value={filters.maxPrice} onChange={(e) => handleFilterChange("maxPrice", e.target.value)} />
                   </div>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">Location</label>
-                  <Input
-                    placeholder="Enter location..."
-                    value={filters.location}
-                    onChange={(e) => handleFilterChange("location", e.target.value)}
-                  />
+                  <Input placeholder="Enter location..." value={filters.location} onChange={(e) => handleFilterChange("location", e.target.value)} />
                 </div>
               </div>
             )}
@@ -218,11 +194,7 @@ export default function Products() {
         {/* Product Grid */}
         <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {products?.map((product: any) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              onClick={() => handleProductClick(product)}
-            />
+            <ProductCard key={product.id} product={product} onClick={() => handleProductClick(product)} />
           ))}
         </div>
 
@@ -236,7 +208,7 @@ export default function Products() {
               </div>
               <h3 className="text-lg font-medium text-gray-900 mb-2">No products found</h3>
               <p className="text-gray-600 mb-4">
-                {Object.values(filters).some(v => v) 
+                {Object.values(filters).some(v => v && v !== 'all' && v !== 'any')
                   ? "Try adjusting your search filters to find more items."
                   : "Be the first to add a product to the marketplace!"
                 }

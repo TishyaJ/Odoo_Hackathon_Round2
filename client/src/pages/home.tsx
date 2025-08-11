@@ -14,17 +14,11 @@ export default function Home() {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
-  // Redirect to home if not authenticated
+  // Redirect to login if not authenticated
   useEffect(() => {
     if (!isLoading && !user) {
-      toast({
-        title: "Unauthorized",
-        description: "You are logged out. Logging in again...",
-        variant: "destructive",
-      });
-      setTimeout(() => {
-        window.location.href = "/api/login";
-      }, 500);
+      toast({ title: "Unauthorized", description: "You are logged out. Logging in again...", variant: "destructive" });
+      setTimeout(() => { window.location.href = "/login"; }, 300);
       return;
     }
   }, [user, isLoading, toast]);
@@ -50,52 +44,13 @@ export default function Home() {
     retry: false,
   });
 
+  // We do not depend on PATCH /api/auth/user here to reduce coupling
   const handleNavigateToListItems = async () => {
-    try {
-      await apiRequest("PATCH", "/api/auth/user", { customerType: "lister" });
-      setLocation("/products");
-    } catch (error) {
-      if (isUnauthorizedError(error as Error)) {
-        toast({
-          title: "Unauthorized",
-          description: "You are logged out. Logging in again...",
-          variant: "destructive",
-        });
-        setTimeout(() => {
-          window.location.href = "/api/login";
-        }, 500);
-        return;
-      }
-      toast({
-        title: "Error",
-        description: "Failed to update user type",
-        variant: "destructive",
-      });
-    }
+    setLocation("/products");
   };
 
   const handleNavigateToRentItems = async () => {
-    try {
-      await apiRequest("PATCH", "/api/auth/user", { customerType: "renter" });
-      setLocation("/products");
-    } catch (error) {
-      if (isUnauthorizedError(error as Error)) {
-        toast({
-          title: "Unauthorized",
-          description: "You are logged out. Logging in again...",
-          variant: "destructive",
-        });
-        setTimeout(() => {
-          window.location.href = "/api/login";
-        }, 500);
-        return;
-      }
-      toast({
-        title: "Error",
-        description: "Failed to update user type",
-        variant: "destructive",
-      });
-    }
+    setLocation("/products");
   };
 
   if (isLoading) {

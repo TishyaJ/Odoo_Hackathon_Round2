@@ -15,7 +15,7 @@ export default function Bookings() {
   const { user, isLoading } = useAuth();
   const { toast } = useToast();
   const [filters, setFilters] = useState({
-    status: "",
+    status: "all",
     startDate: "",
     endDate: "",
   });
@@ -24,14 +24,8 @@ export default function Bookings() {
   // Redirect to home if not authenticated
   useEffect(() => {
     if (!isLoading && !user) {
-      toast({
-        title: "Unauthorized",
-        description: "You are logged out. Logging in again...",
-        variant: "destructive",
-      });
-      setTimeout(() => {
-        window.location.href = "/api/login";
-      }, 500);
+      toast({ title: "Unauthorized", description: "You are logged out. Logging in again...", variant: "destructive" });
+      setTimeout(() => { window.location.href = "/login"; }, 300);
       return;
     }
   }, [user, isLoading, toast]);
@@ -39,10 +33,11 @@ export default function Bookings() {
   const { data: bookings = [] } = useQuery<any[]>({
     queryKey: ["/api/bookings", filters],
     queryFn: ({ queryKey }) => {
-      const [url, filterParams] = queryKey;
+      const [url, filterParams] = queryKey as [string, typeof filters];
       const searchParams = new URLSearchParams();
-      Object.entries(filterParams as any).forEach(([key, value]) => {
-        if (value) searchParams.append(key, value as string);
+      Object.entries(filterParams).forEach(([key, value]) => {
+        if (!value || value === 'all') return;
+        searchParams.append(key, value as string);
       });
       return fetch(`${url}?${searchParams}`).then(res => res.json());
     },
@@ -150,7 +145,7 @@ export default function Bookings() {
                     <SelectValue placeholder="All Statuses" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Statuses</SelectItem>
+                    <SelectItem value="all">All Statuses</SelectItem>
                     <SelectItem value="reserved">Reserved</SelectItem>
                     <SelectItem value="confirmed">Confirmed</SelectItem>
                     <SelectItem value="active">Active</SelectItem>
