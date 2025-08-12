@@ -1,80 +1,125 @@
-# 🏟 Rental Booking Management System (RBMS)
+# 📦 RentalPro – Peer-to-Peer Rental Marketplace
+Team members : Yuvraj Singh , Tishya Jha
 
-A **dynamic, modular, and scalable** platform designed to manage facility rentals, bookings, and payments with **robust database design** and **seamless user experience**.  
-Built with **clean architecture**, **error-resilient APIs**, and **admin-friendly controls** for real-world usage.  
-Team Members: TISHYA JHA AND YUVRAJ SINGH  
----
-
-## 📌 Overview
-RBMS simplifies the process of managing sports facilities, courts, and rental spaces by combining:
-- **Efficient booking workflows**
-- **Advanced pricing rules**
-- **Automated invoice generation**
-- **Media storage for facilities & courts**
-- **Real-time notifications**
-- **Complete audit trails**
+video link : https://drive.google.com/drive/folders/10HMccEHxnx-ypVKNR3WctD6sNv26-1bC
+A **modern, full-stack rental platform** connecting item owners with renters through a seamless booking experience. Built with cutting-edge technologies for scalability, RentalPro enables users to list, discover, and rent items with secure payments and full management tools.
 
 ---
 
-## 🎯 Features
-### 🔑 Core Modules
-- **User Management**: Role-based access (`admin`, `owner`, `user`), authentication, profile management.
-- **Facility & Court Management**: Add, edit, and manage facilities, courts, and amenities.
-- **Booking System**: Conflict-free scheduling, time validation, and peak/off-peak pricing.
-- **Invoice Management**: Auto-generated invoices with tax, discount, and payment tracking.
-- **Media Storage**: Image & video storage for facility showcases.
-- **Notifications**: Booking updates, payment reminders, and system alerts.
-- **Audit Logging**: Track every admin and system-level change.
+## 🎯 Core Features
+
+### 🔐 Authentication & User Management
+- Multi-factor authentication with OTP verification
+- Google OAuth login
+- Role-based access control (Customer, Admin)
+- Profile management with Cloudinary image uploads
+- Secure JWT token-based sessions
+
+### 📦 Product Management
+- Dynamic product listings with rich media support
+- Category-based organization with custom icons
+- Advanced search & filtering (price, location, availability)
+- Cloudinary integration for image storage
+- Flexible pricing models (hourly, daily, weekly, monthly)
+
+### 📅 Booking System
+- Real-time availability calendar
+- Conflict-free scheduling
+- Duration-based dynamic pricing & discounts
+- Booking status tracking (reserved → confirmed → pickup → active → returned)
+- Late fee calculation
+
+### 💳 Payment Integration
+- Stripe payment processing
+- Secure payment intents
+- Invoice generation with detailed breakdowns
+- Service fee calculations
+- Email notifications for payment confirmations
+
+### 📊 Dashboard & Analytics
+- Owner dashboard for listing management
+- Admin dashboard for platform oversight
+- User statistics & booking history
+- Real-time notifications
+- Wishlist functionality
+
+### ⭐ Reviews & Feedback
+- Product reviews with ratings
+- Verified purchase badges
+- Feedback system for platform improvement
+- Sentiment analysis for feedback categorization
 
 ---
 
-## 🗄 Database Design Highlights
-- **Normalized Schema** for minimal redundancy.
-- **Relation Mapping** for intuitive querying.
-- **Index Optimization** to improve search speed for:
-  - Users by email or role.
-  - Facilities by location.
-  - Bookings by date, court, or status.
-  - Invoices by number or due date.
-- **Constraint Enforcement** for data integrity.
-- **Enum Types** for controlled field values.
+## 🛠 Technology Stack
+
+### Frontend
+- **React 18** + TypeScript
+- Wouter (client-side routing)
+- TanStack Query (state management)
+- Tailwind CSS + shadcn/ui
+- Framer Motion (animations)
+- React Hook Form + Zod (form validation)
+
+### Backend
+- **Node.js** + Express.js
+- TypeScript for type safety
+- Drizzle ORM + PostgreSQL
+- JWT authentication + bcrypt
+- Stripe API (payments)
+- SendGrid (email)
+- Cloudinary (media storage)
+
+### Database
+- PostgreSQL (Neon serverless)
+- Normalized schema with relations
+- Indexed queries for performance
+- Enum types for data consistency
 
 ---
 
-## 🛡 Reliability & Safety
-- **Input Validation** at both API & DB level.
-- **Transaction Safety** with consistent lock ordering.
-- **Deadlock Prevention** and retry logic for high-traffic booking scenarios.
-- **Error Handling** with meaningful responses for users & admins.
+## 🏗 Architecture Highlights
+
+### Database Design
+- Normalized schema with minimal redundancy
+- Strong entity relationships
+- Optimized indexes
+- Constraint enforcement
+- Audit trails for transactions
+
+### API Design
+- RESTful endpoints with consistent patterns
+- Input validation at multiple layers
+- Error handling with meaningful responses
+- Rate limiting & security measures
+- Transaction-safe operations
+
+### Security
+- Password hashing with bcrypt
+- JWT token management
+- CORS protection
+- Input sanitization
+- SQL injection prevention
 
 ---
 
-## 📊 Admin Dashboard Capabilities
-- **User & Role Management**
-- **Real-time Booking Overview**
-- **Invoice & Payment Tracking**
-- **Audit Log Review**
-- **Media File Management**
+## 🚀 Getting Started
 
----
+### Prerequisites
+- Node.js 18+
+- PostgreSQL
+- Stripe account
+- Cloudinary account
+- SendGrid account *(optional)*
 
-## 🌟 Why It Stands Out
-- **Backend-focused** with scalable, production-ready architecture.
-- **Clean code** principles with modular structure.
-- **Advanced UI/UX** for intuitive navigation.
-- **Optimized queries** for high performance under load.
-- **Built for real-world expansion** — add new rental types or features with minimal changes.
-
----
-
-## 📈 Future Enhancements
-- AI-driven booking recommendations.
-- Predictive pricing based on demand trends.
-- Multi-language support.
-- Offline-first booking capability.
-
----
-
-
-
----
+### Environment Variables
+Create a `.env` file in the project root:
+```env
+DATABASE_URL=your_postgres_connection_string
+STRIPE_SECRET_KEY=your_stripe_secret_key
+CLOUDINARY_CLOUD_NAME=your_cloudinary_name
+CLOUDINARY_API_KEY=your_cloudinary_key
+CLOUDINARY_API_SECRET=your_cloudinary_secret
+SENDGRID_API_KEY=your_sendgrid_key
+JWT_SECRET=your_jwt_secret
+GOOGLE_CLIENT_ID=your_google_oauth_client_id
