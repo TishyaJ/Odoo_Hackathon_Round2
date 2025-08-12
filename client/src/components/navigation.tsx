@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Bell, User, LogOut, Plus, Heart } from "lucide-react";
+import { Bell, User, LogOut, Plus, Heart, BarChart3, Shield } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -22,7 +22,19 @@ export default function Navigation() {
     retry: false,
   });
 
+  // Check if user has products (to show owner dashboard link)
+  const { data: userProducts = [] } = useQuery<any[]>({
+    queryKey: ["/api/products", { ownerId: user?.id }],
+    queryFn: async () => {
+      const response = await apiRequest("GET", `/api/products?ownerId=${user?.id}`);
+      return response.json();
+    },
+    enabled: !!user,
+    retry: false,
+  });
+
   const unreadCount = notifications.filter((n: any) => !n.isRead).length;
+  const hasProducts = userProducts.length > 0;
 
   if (!user) return null;
 
@@ -120,6 +132,18 @@ export default function Navigation() {
                   <User className="w-4 h-4 mr-2" />
                   Profile
                 </DropdownMenuItem>
+                {user.role === 'admin' && (
+                  <DropdownMenuItem onClick={() => setLocation("/admin")}>
+                    <Shield className="w-4 h-4 mr-2" />
+                    Admin Dashboard
+                  </DropdownMenuItem>
+                )}
+                {hasProducts && (
+                  <DropdownMenuItem onClick={() => setLocation("/owner-dashboard")}>
+                    <BarChart3 className="w-4 h-4 mr-2" />
+                    Owner Dashboard
+                  </DropdownMenuItem>
+                )}
                 <DropdownMenuItem onClick={logout}>
                   <LogOut className="w-4 h-4 mr-2" />
                   Logout

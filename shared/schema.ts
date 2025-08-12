@@ -174,6 +174,24 @@ export const wishlist = pgTable("wishlist", {
   index("IDX_wishlist_user_product").on(table.userId, table.productId),
 ]);
 
+// Product Reviews
+export const reviews = pgTable("reviews", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").references(() => users.id).notNull(),
+  productId: varchar("product_id").references(() => products.id).notNull(),
+  bookingId: varchar("booking_id").references(() => bookings.id), // Optional: link to specific booking
+  rating: integer("rating").notNull(), // 1-5 stars
+  title: varchar("title", { length: 200 }),
+  comment: text("comment"),
+  isVerified: boolean("is_verified").default(false), // Verified purchase
+  isActive: boolean("is_active").default(true),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+}, (table) => [
+  index("IDX_reviews_product").on(table.productId),
+  index("IDX_reviews_user").on(table.userId),
+]);
+
 // Feedback
 export const feedback = pgTable("feedback", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -211,6 +229,7 @@ export const productsRelations = relations(products, ({ one, many }) => ({
   }),
   pricing: many(productPricing),
   bookings: many(bookings),
+  reviews: many(reviews),
 }));
 
 export const productPricingRelations = relations(productPricing, ({ one }) => ({
@@ -254,6 +273,21 @@ export const wishlistRelations = relations(wishlist, ({ one, many }) => ({
   product: one(products, {
     fields: [wishlist.productId],
     references: [products.id],
+  }),
+}));
+
+export const reviewsRelations = relations(reviews, ({ one }) => ({
+  user: one(users, {
+    fields: [reviews.userId],
+    references: [users.id],
+  }),
+  product: one(products, {
+    fields: [reviews.productId],
+    references: [products.id],
+  }),
+  booking: one(bookings, {
+    fields: [reviews.bookingId],
+    references: [bookings.id],
   }),
 }));
 
@@ -331,6 +365,7 @@ export type DurationOption = typeof durationOptions.$inferSelect;
 export type StatusConfig = typeof statusConfig.$inferSelect;
 export type BusinessConfig = typeof businessConfig.$inferSelect;
 export type Wishlist = typeof wishlist.$inferSelect;
+export type Review = typeof reviews.$inferSelect;
 export type Feedback = typeof feedback.$inferSelect;
 
 export type InsertUser = typeof users.$inferInsert;
@@ -340,4 +375,5 @@ export type InsertProductPricing = z.infer<typeof insertProductPricingSchema>;
 export type InsertBooking = z.infer<typeof insertBookingSchema>;
 export type InsertNotification = z.infer<typeof insertNotificationSchema>;
 export type InsertWishlist = typeof wishlist.$inferInsert;
+export type InsertReview = typeof reviews.$inferInsert;
 export type InsertFeedback = typeof feedback.$inferInsert;

@@ -48,6 +48,7 @@ import {
   Lightbulb,
   AlertTriangle,
   Info,
+  Shield,
   Calendar as CalendarIcon,
 } from "lucide-react";
 
@@ -290,7 +291,7 @@ export default function Home({}: HomeProps) {
           </div>
 
           {/* Quick Actions */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
             <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setLocation("/products")}>
               <CardContent className="p-6 text-center">
                 <Package className="w-12 h-12 text-blue-500 mx-auto mb-4" />
@@ -314,6 +315,25 @@ export default function Home({}: HomeProps) {
                 <p className="text-gray-600">View and manage your rentals</p>
               </CardContent>
             </Card>
+
+            {userStats.itemsListed > 0 && (
+              <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setLocation("/owner-dashboard")}>
+                <CardContent className="p-6 text-center">
+                  <BarChart3 className="w-12 h-12 text-orange-500 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Owner Dashboard</h3>
+                  <p className="text-gray-600">Track your rental business analytics</p>
+                </CardContent>
+              </Card>
+            )}
+            {user?.role === 'admin' && (
+              <Card className="cursor-pointer hover:shadow-lg transition-shadow" onClick={() => setLocation("/admin")}>
+                <CardContent className="p-6 text-center">
+                  <Shield className="w-12 h-12 text-red-500 mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">Admin Dashboard</h3>
+                  <p className="text-gray-600">Manage users, products, and system settings</p>
+                </CardContent>
+              </Card>
+            )}
           </div>
 
           {/* Categories */}

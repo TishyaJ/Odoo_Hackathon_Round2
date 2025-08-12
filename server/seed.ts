@@ -78,28 +78,34 @@ async function seed() {
     if (existingCategories.length === 0) {
       await db.insert(categories).values([
         { 
-          name: "Estate", 
-          slug: "estate",
-          description: "Real estate and property rentals",
-          icon: "🏠"
+          name: "Entertainment", 
+          slug: "entertainment",
+          description: "Electronics and entertainment equipment",
+          icon: "🎮"
         },
         { 
-          name: "Home Utilities", 
-          slug: "home-utilities",
-          description: "Home appliances and utilities",
+          name: "Daily Utilities", 
+          slug: "daily-utilities",
+          description: "Home appliances and daily utilities",
           icon: "🔧"
+        },
+        { 
+          name: "Electronics", 
+          slug: "electronics",
+          description: "Electronic devices and gadgets",
+          icon: "📱"
+        },
+        { 
+          name: "Real Estate", 
+          slug: "real-estate",
+          description: "Real estate and property rentals",
+          icon: "🏠"
         },
         { 
           name: "Vehicles", 
           slug: "vehicles",
           description: "Cars, bikes, and transportation",
           icon: "🚗"
-        },
-        { 
-          name: "Entertainment", 
-          slug: "entertainment",
-          description: "Electronics and entertainment equipment",
-          icon: "🎮"
         },
       ]);
       console.log("✅ Categories seeded");

@@ -50,17 +50,7 @@ export default function AddItemPage() {
             </div>
           </div>
           
-          {user.customerType !== 'lister' && (
-            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
-              <div className="flex items-center space-x-2">
-                <Package className="w-5 h-5 text-blue-600" />
-                <p className="text-blue-800">
-                  <strong>Note:</strong> You're currently registered as a "renter". 
-                  To list items, you can update your account type in your profile settings.
-                </p>
-              </div>
-            </div>
-          )}
+
         </div>
 
         <Card className="shadow-lg">

@@ -10,6 +10,7 @@ import {
   statusConfig,
   businessConfig,
   wishlist,
+  reviews,
   feedback,
   type User,
   type InsertUser,
@@ -26,6 +27,8 @@ import {
   type InsertProductPricing,
   type InsertNotification,
   type Wishlist,
+  type Review,
+  type InsertReview,
   type Feedback,
 } from "@shared/schema";
 import { db } from "./db";
@@ -37,9 +40,11 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   updateUser(id: string, updates: Partial<InsertUser>): Promise<User>;
+  deleteUser(id: string): Promise<void>;
   
   // Category operations
   getCategories(): Promise<Category[]>;
+  createCategory(category: InsertCategory): Promise<Category>;
   
   // Product operations
   getProducts(filters?: {
@@ -89,6 +94,14 @@ export interface IStorage {
   removeFromWishlist(userId: string, productId: string): Promise<void>;
   isInWishlist(userId: string, productId: string): Promise<boolean>;
   
+  // Review operations
+  getProductReviews(productId: string): Promise<Review[]>;
+  getProductRating(productId: string): Promise<{ averageRating: number; totalReviews: number }>;
+  createReview(review: InsertReview): Promise<Review>;
+  updateReview(id: string, review: Partial<InsertReview>): Promise<Review>;
+  deleteReview(id: string): Promise<void>;
+  canUserReview(userId: string, productId: string): Promise<boolean>;
+  
   // Configuration operations
   getDurationOptions(): Promise<DurationOption[]>;
   getStatusConfig(): Promise<StatusConfig[]>;
@@ -119,13 +132,27 @@ export interface IStorage {
   getAllFeedback(): Promise<any[]>;
   banUser(userId: string): Promise<void>;
   unbanUser(userId: string): Promise<void>;
+  deleteUser(userId: string): Promise<void>;
   approveProduct(productId: string): Promise<void>;
   rejectProduct(productId: string, reason: string): Promise<void>;
+  deleteProduct(id: string): Promise<void>;
   replyToFeedback(feedbackId: string, reply: string): Promise<void>;
   archiveFeedback(feedbackId: string): Promise<void>;
   makeUserAdmin(userId: string): Promise<void>;
   getUserFeedback(userId: string): Promise<Feedback[]>;
   createUserFeedback(userId: string, feedbackData: any): Promise<Feedback>;
+  
+  // Owner analytics operations
+  getOwnerAnalytics(ownerId: string): Promise<{
+    totalRevenue: number;
+    totalBookings: number;
+    activeBookings: number;
+    uniqueRenters: number;
+    bookingsByLocation: Array<{ location: string; count: number; revenue: number }>;
+    bookingsByCategory: Array<{ category: string; count: number; revenue: number }>;
+    monthlyRevenue: Array<{ month: string; revenue: number }>;
+    topProducts: Array<{ name: string; bookings: number; revenue: number }>;
+  }>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -161,6 +188,11 @@ export class DatabaseStorage implements IStorage {
       .from(categories)
       .where(eq(categories.isActive, true))
       .orderBy(asc(categories.name));
+  }
+
+  async createCategory(category: InsertCategory): Promise<Category> {
+    const [newCategory] = await db.insert(categories).values(category).returning();
+    return newCategory;
   }
 
   // Product operations
@@ -441,6 +473,76 @@ export class DatabaseStorage implements IStorage {
     return !!wishlistItem;
   }
 
+  // Review operations
+  async getProductReviews(productId: string): Promise<Review[]> {
+    return await db
+      .select()
+      .from(reviews)
+      .where(and(eq(reviews.productId, productId), eq(reviews.isActive, true)))
+      .orderBy(desc(reviews.createdAt));
+  }
+
+  async getProductRating(productId: string): Promise<{ averageRating: number; totalReviews: number }> {
+    const result = await db
+      .select({
+        averageRating: sql<number>`COALESCE(AVG(${reviews.rating}), 0)`,
+        totalReviews: sql<number>`COUNT(*)`,
+      })
+      .from(reviews)
+      .where(and(eq(reviews.productId, productId), eq(reviews.isActive, true)));
+
+    return {
+      averageRating: Math.round(parseFloat(result[0]?.averageRating || '0') * 10) / 10,
+      totalReviews: parseInt(result[0]?.totalReviews || '0'),
+    };
+  }
+
+  async createReview(review: InsertReview): Promise<Review> {
+    const [newReview] = await db.insert(reviews).values(review).returning();
+    return newReview;
+  }
+
+  async updateReview(id: string, review: Partial<InsertReview>): Promise<Review> {
+    const [updatedReview] = await db
+      .update(reviews)
+      .set({ ...review, updatedAt: new Date() })
+      .where(eq(reviews.id, id))
+      .returning();
+    return updatedReview;
+  }
+
+  async deleteReview(id: string): Promise<void> {
+    await db.update(reviews).set({ isActive: false, updatedAt: new Date() }).where(eq(reviews.id, id));
+  }
+
+  async canUserReview(userId: string, productId: string): Promise<boolean> {
+    // Check if user has completed a booking for this product
+    const completedBookings = await db
+      .select()
+      .from(bookings)
+      .where(
+        and(
+          eq(bookings.customerId, userId),
+          eq(bookings.productId, productId),
+          eq(bookings.status, 'returned')
+        )
+      );
+    
+    // Check if user already reviewed this product
+    const existingReview = await db
+      .select()
+      .from(reviews)
+      .where(
+        and(
+          eq(reviews.userId, userId),
+          eq(reviews.productId, productId),
+          eq(reviews.isActive, true)
+        )
+      );
+
+    return completedBookings.length > 0 && existingReview.length === 0;
+  }
+
   // Configuration operations
   async getDurationOptions(): Promise<DurationOption[]> {
     return await db
@@ -535,6 +637,154 @@ export class DatabaseStorage implements IStorage {
     };
   }
 
+  // Owner analytics operations
+  async getOwnerAnalytics(ownerId: string): Promise<{
+    totalRevenue: number;
+    totalBookings: number;
+    activeBookings: number;
+    uniqueRenters: number;
+    bookingsByLocation: Array<{ location: string; count: number; revenue: number }>;
+    bookingsByCategory: Array<{ category: string; count: number; revenue: number }>;
+    monthlyRevenue: Array<{ month: string; revenue: number }>;
+    topProducts: Array<{ name: string; bookings: number; revenue: number }>;
+  }> {
+    try {
+      console.log('📊 Calculating owner analytics for:', ownerId);
+      
+      // Get owner's products
+      const ownerProducts = await db.select().from(products).where(eq(products.ownerId, ownerId));
+      const productIds = ownerProducts.map(p => p.id);
+      
+      if (productIds.length === 0) {
+        return {
+          totalRevenue: 0,
+          totalBookings: 0,
+          activeBookings: 0,
+          uniqueRenters: 0,
+          bookingsByLocation: [],
+          bookingsByCategory: [],
+          monthlyRevenue: [],
+          topProducts: [],
+        };
+      }
+      
+      // Get all bookings for owner's products
+      const ownerBookings = await db.select().from(bookings)
+        .where(sql`${bookings.productId} IN (${sql.join(productIds.map(id => sql`${id}`), sql`, `)})`);
+      
+      // Get categories for analytics
+      const categories = await db.select().from(categories);
+      const categoryMap = new Map(categories.map(c => [c.id, c.name]));
+      
+      // Calculate basic stats
+      const totalRevenue = ownerBookings.reduce((sum, b) => sum + parseFloat(b.totalAmount || '0'), 0);
+      const totalBookings = ownerBookings.length;
+      const activeBookings = ownerBookings.filter(b => b.status === 'active').length;
+      const uniqueRenters = new Set(ownerBookings.map(b => b.customerId)).size;
+      
+      // Bookings by location
+      const locationMap = new Map<string, { count: number; revenue: number }>();
+      ownerBookings.forEach(booking => {
+        const product = ownerProducts.find(p => p.id === booking.productId);
+        if (product) {
+          const location = product.location;
+          const current = locationMap.get(location) || { count: 0, revenue: 0 };
+          locationMap.set(location, {
+            count: current.count + 1,
+            revenue: current.revenue + parseFloat(booking.totalAmount || '0')
+          });
+        }
+      });
+      
+      const bookingsByLocation = Array.from(locationMap.entries()).map(([location, data]) => ({
+        location,
+        count: data.count,
+        revenue: data.revenue
+      }));
+      
+      // Bookings by category
+      const categoryMap2 = new Map<string, { count: number; revenue: number }>();
+      ownerBookings.forEach(booking => {
+        const product = ownerProducts.find(p => p.id === booking.productId);
+        if (product) {
+          const categoryName = categoryMap.get(product.categoryId) || 'Unknown';
+          const current = categoryMap2.get(categoryName) || { count: 0, revenue: 0 };
+          categoryMap2.set(categoryName, {
+            count: current.count + 1,
+            revenue: current.revenue + parseFloat(booking.totalAmount || '0')
+          });
+        }
+      });
+      
+      const bookingsByCategory = Array.from(categoryMap2.entries()).map(([category, data]) => ({
+        category,
+        count: data.count,
+        revenue: data.revenue
+      }));
+      
+      // Monthly revenue (last 6 months)
+      const monthlyRevenue = [];
+      const today = new Date();
+      for (let i = 5; i >= 0; i--) {
+        const month = new Date(today.getFullYear(), today.getMonth() - i, 1);
+        const monthEnd = new Date(today.getFullYear(), today.getMonth() - i + 1, 0);
+        const monthName = month.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+        
+        const monthBookings = ownerBookings.filter(b => {
+          const bookingDate = new Date(b.createdAt);
+          return bookingDate >= month && bookingDate <= monthEnd;
+        });
+        
+        const monthRevenue = monthBookings.reduce((sum, b) => sum + parseFloat(b.totalAmount || '0'), 0);
+        monthlyRevenue.push({ month: monthName, revenue: monthRevenue });
+      }
+      
+      // Top products by revenue
+      const productMap = new Map<string, { name: string; bookings: number; revenue: number }>();
+      ownerBookings.forEach(booking => {
+        const product = ownerProducts.find(p => p.id === booking.productId);
+        if (product) {
+          const current = productMap.get(product.id) || { name: product.name, bookings: 0, revenue: 0 };
+          productMap.set(product.id, {
+            name: product.name,
+            bookings: current.bookings + 1,
+            revenue: current.revenue + parseFloat(booking.totalAmount || '0')
+          });
+        }
+      });
+      
+      const topProducts = Array.from(productMap.values())
+        .sort((a, b) => b.revenue - a.revenue)
+        .slice(0, 5);
+      
+      const analytics = {
+        totalRevenue,
+        totalBookings,
+        activeBookings,
+        uniqueRenters,
+        bookingsByLocation,
+        bookingsByCategory,
+        monthlyRevenue,
+        topProducts,
+      };
+      
+      console.log('📊 Calculated owner analytics:', analytics);
+      return analytics;
+    } catch (error) {
+      console.error('📊 Error calculating owner analytics:', error);
+      return {
+        totalRevenue: 0,
+        totalBookings: 0,
+        activeBookings: 0,
+        uniqueRenters: 0,
+        bookingsByLocation: [],
+        bookingsByCategory: [],
+        monthlyRevenue: [],
+        topProducts: [],
+      };
+    }
+  }
+
   async getUserStats(userId: string): Promise<{
     activeRentals: number;
     lateReturns: number;
@@ -626,6 +876,32 @@ export class DatabaseStorage implements IStorage {
 
   async unbanUser(userId: string): Promise<void> {
     await db.update(users).set({ isActive: true, updatedAt: new Date() }).where(eq(users.id, userId));
+  }
+
+  async deleteUser(userId: string): Promise<void> {
+    // First, delete all related data for the user
+    // Delete user's bookings
+    await db.delete(bookings).where(eq(bookings.customerId, userId));
+    
+    // Delete user's products and their pricing
+    const userProducts = await db.select().from(products).where(eq(products.ownerId, userId));
+    for (const product of userProducts) {
+      await db.delete(productPricing).where(eq(productPricing.productId, product.id));
+      await db.delete(businessConfig).where(sql`${businessConfig.key} LIKE ${`product_${product.id}_%`}`);
+    }
+    await db.delete(products).where(eq(products.ownerId, userId));
+    
+    // Delete user's wishlist items
+    await db.delete(wishlist).where(eq(wishlist.userId, userId));
+    
+    // Delete user's notifications
+    await db.delete(notifications).where(eq(notifications.userId, userId));
+    
+    // Delete user's feedback
+    await db.delete(feedback).where(eq(feedback.userId, userId));
+    
+    // Finally, delete the user
+    await db.delete(users).where(eq(users.id, userId));
   }
 
   async approveProduct(productId: string): Promise<void> {

@@ -427,6 +427,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Owner analytics route
+  app.get('/api/owner/analytics', authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.user!.id;
+      const analytics = await storage.getOwnerAnalytics(userId);
+      
+      res.json(analytics);
+    } catch (error) {
+      console.error("Get owner analytics error:", error);
+      res.status(500).json({ message: "Failed to fetch owner analytics" });
+    }
+  });
+
   // Categories routes
   app.get('/api/categories', async (req, res) => {
     try {
@@ -435,6 +448,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Get categories error:", error);
       res.status(500).json({ message: "Failed to fetch categories" });
+    }
+  });
+
+  // Admin: Create category
+  app.post('/api/admin/categories', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const { name, slug, description, icon } = req.body;
+      const category = await storage.createCategory({ name, slug, description, icon });
+      res.json(category);
+    } catch (error) {
+      console.error("Create category error:", error);
+      res.status(500).json({ message: "Failed to create category" });
     }
   });
 
@@ -892,6 +917,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.delete('/api/admin/users/:userId', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const userId = req.params.userId;
+      
+      // Prevent admin from deleting themselves
+      if (userId === req.user!.id) {
+        return res.status(400).json({ message: "You cannot delete your own account" });
+      }
+      
+      await storage.deleteUser(userId);
+      res.json({ message: "User deleted successfully" });
+    } catch (error) {
+      console.error("Delete user error:", error);
+      res.status(500).json({ message: "Failed to delete user" });
+    }
+  });
+
   // Admin product management
   app.patch('/api/admin/products/:productId/approve', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
     try {
@@ -913,6 +955,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Reject product error:", error);
       res.status(500).json({ message: "Failed to reject product" });
+    }
+  });
+
+  app.delete('/api/admin/products/:productId', authenticateToken, requireAdmin, async (req: AuthRequest, res) => {
+    try {
+      const productId = req.params.productId;
+      await storage.deleteProduct(productId);
+      res.json({ message: "Product deleted successfully" });
+    } catch (error) {
+      console.error("Delete product error:", error);
+      res.status(500).json({ message: "Failed to delete product" });
     }
   });
 
@@ -1214,6 +1267,85 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Check wishlist error:", error);
       res.status(500).json({ message: "Failed to check wishlist" });
+    }
+  });
+
+  // Reviews routes
+  app.get('/api/products/:productId/reviews', async (req, res) => {
+    try {
+      const productId = req.params.productId;
+      const reviews = await storage.getProductReviews(productId);
+      res.json(reviews);
+    } catch (error) {
+      console.error("Get reviews error:", error);
+      res.status(500).json({ message: "Failed to fetch reviews" });
+    }
+  });
+
+  app.get('/api/products/:productId/rating', async (req, res) => {
+    try {
+      const productId = req.params.productId;
+      const rating = await storage.getProductRating(productId);
+      res.json(rating);
+    } catch (error) {
+      console.error("Get rating error:", error);
+      res.status(500).json({ message: "Failed to fetch rating" });
+    }
+  });
+
+  app.post('/api/products/:productId/reviews', authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const productId = req.params.productId;
+      const { rating, title, comment } = req.body;
+
+      // Check if user can review this product
+      const canReview = await storage.canUserReview(req.user!.id, productId);
+      if (!canReview) {
+        return res.status(403).json({ message: "You can only review products you have rented and returned" });
+      }
+
+      const review = await storage.createReview({
+        userId: req.user!.id,
+        productId,
+        rating,
+        title,
+        comment,
+        isVerified: true, // Since they completed a booking
+      });
+
+      res.json(review);
+    } catch (error) {
+      console.error("Create review error:", error);
+      res.status(500).json({ message: "Failed to create review" });
+    }
+  });
+
+  app.put('/api/reviews/:reviewId', authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const reviewId = req.params.reviewId;
+      const { rating, title, comment } = req.body;
+
+      const review = await storage.updateReview(reviewId, {
+        rating,
+        title,
+        comment,
+      });
+
+      res.json(review);
+    } catch (error) {
+      console.error("Update review error:", error);
+      res.status(500).json({ message: "Failed to update review" });
+    }
+  });
+
+  app.delete('/api/reviews/:reviewId', authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const reviewId = req.params.reviewId;
+      await storage.deleteReview(reviewId);
+      res.json({ message: "Review deleted successfully" });
+    } catch (error) {
+      console.error("Delete review error:", error);
+      res.status(500).json({ message: "Failed to delete review" });
     }
   });
 

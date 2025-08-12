@@ -37,7 +37,7 @@ export default function CloudinaryUpload({ onSuccess }: CloudinaryUploadProps) {
     hourly: { enabled: false, price: '' },
     daily: { enabled: false, price: '' },
     weekly: { enabled: false, price: '' },
-    yearly: { enabled: false, price: '' },
+    monthly: { enabled: false, price: '' },
   });
   
   const [lateFees, setLateFees] = useState({
@@ -48,10 +48,15 @@ export default function CloudinaryUpload({ onSuccess }: CloudinaryUploadProps) {
   const [isUploading, setIsUploading] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
 
-  const { data: categories = [] } = useQuery<any[]>({
+  const { data: categories = [], isLoading: categoriesLoading, error: categoriesError } = useQuery<any[]>({
     queryKey: ["/api/categories"],
     retry: false,
   });
+
+  // Debug logging
+  console.log('Categories loading:', categoriesLoading);
+  console.log('Categories error:', categoriesError);
+  console.log('Categories data:', categories);
 
   const createProductMutation = useMutation({
     mutationFn: async (productData: any) => {
@@ -93,7 +98,7 @@ export default function CloudinaryUpload({ onSuccess }: CloudinaryUploadProps) {
       hourly: { enabled: false, price: '' },
       daily: { enabled: false, price: '' },
       weekly: { enabled: false, price: '' },
-      yearly: { enabled: false, price: '' },
+      monthly: { enabled: false, price: '' },
     });
     setLateFees({
       dailyRate: '',
@@ -357,19 +362,27 @@ export default function CloudinaryUpload({ onSuccess }: CloudinaryUploadProps) {
         </div>
         <div>
           <Label className="text-sm font-medium text-gray-700 mb-2">📂 Category (Required)</Label>
-                      <Select value={productForm.categoryId} onValueChange={(value) => handleFormChange('categoryId', value)}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select Category" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="select-category">Select Category</SelectItem>
-                {categories?.map((category: any) => (
+          <Select value={productForm.categoryId} onValueChange={(value) => handleFormChange('categoryId', value)}>
+            <SelectTrigger>
+              <SelectValue placeholder={categoriesLoading ? "Loading categories..." : "Select Category"} />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="select-category">Select Category</SelectItem>
+              {categoriesLoading ? (
+                <SelectItem value="loading" disabled>Loading categories...</SelectItem>
+              ) : categoriesError ? (
+                <SelectItem value="error" disabled>Error loading categories</SelectItem>
+              ) : categories?.length === 0 ? (
+                <SelectItem value="empty" disabled>No categories available</SelectItem>
+              ) : (
+                categories?.map((category: any) => (
                   <SelectItem key={category.id} value={category.id}>
                     {category.icon} {category.name}
                   </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+                ))
+              )}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -423,7 +436,7 @@ export default function CloudinaryUpload({ onSuccess }: CloudinaryUploadProps) {
               { key: 'hourly', label: 'Per Hour', icon: '⏰' },
               { key: 'daily', label: 'Per Day', icon: '📅' },
               { key: 'weekly', label: 'Per Week', icon: '📆' },
-              { key: 'yearly', label: 'Per Year', icon: '📊' },
+              { key: 'monthly', label: 'Per Month', icon: '📊' },
             ].map(({ key, label, icon }) => (
               <div key={key} className="flex items-center space-x-4 p-3 bg-white rounded-lg border">
                 <Checkbox

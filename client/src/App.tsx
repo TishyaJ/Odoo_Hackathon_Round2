@@ -13,6 +13,7 @@ import AddItem from "@/pages/add-item";
 import Notifications from "@/pages/notifications";
 import Profile from "@/pages/profile";
 import AdminDashboard from "@/pages/admin-dashboard";
+import OwnerDashboard from "@/pages/owner-dashboard";
 import Bookings from "@/pages/bookings";
 import Wishlist from "@/pages/wishlist";
 import { GoogleOAuthProvider } from '@react-oauth/google';
@@ -46,6 +47,7 @@ function Router() {
       <Route path="/notifications" component={Notifications} />
       <Route path="/profile" component={Profile} />
       <Route path="/admin" component={AdminDashboard} />
+      <Route path="/owner-dashboard" component={OwnerDashboard} />
       <Route path="/bookings" component={Bookings} />
       <Route path="/wishlist" component={Wishlist} />
       <Route component={NotFound} />

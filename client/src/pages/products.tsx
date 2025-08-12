@@ -36,6 +36,21 @@ export default function Products() {
     availability: "any",
   });
 
+  const { data: categories = [] } = useQuery<any[]>({
+    queryKey: ["/api/categories"],
+    retry: false,
+  });
+
+  // Convert category slug to category ID when categories are loaded
+  useEffect(() => {
+    if (categoryFromUrl && categories.length > 0) {
+      const category = categories.find(cat => cat.slug === categoryFromUrl);
+      if (category) {
+        setFilters(prev => ({ ...prev, categoryId: category.id }));
+      }
+    }
+  }, [categoryFromUrl, categories]);
+
   // Redirect to login if not authenticated
   useEffect(() => {
     if (!isLoading && !user) {
@@ -51,15 +66,8 @@ export default function Products() {
     }
   }, [user, isLoading, toast]);
 
-  const { data: categories = [] } = useQuery<any[]>({
-    queryKey: ["/api/categories"],
-    retry: false,
-  });
-
   // Debug logging
   console.log('User:', user);
-  console.log('User customerType:', user?.customerType);
-  console.log('Should show Add Product:', user?.customerType === 'lister');
 
 
   const { data: products = [], refetch: refetchProducts } = useQuery<any[]>({
@@ -119,8 +127,27 @@ export default function Products() {
             <div>
               <h1 className="text-3xl font-bold text-gray-900 mb-2">Browse & Rent Items</h1>
               <p className="text-gray-600">Discover thousands of items available for rent</p>
+              {categoryFromUrl && categories.length > 0 && (
+                <div className="mt-2">
+                  <span className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800">
+                    Filtering by: {categories.find(cat => cat.slug === categoryFromUrl)?.name || categoryFromUrl}
+                    <button 
+                      onClick={() => {
+                        setFilters(prev => ({ ...prev, categoryId: "all" }));
+                        // Update URL to remove category parameter
+                        const newUrl = new URL(window.location.href);
+                        newUrl.searchParams.delete('category');
+                        window.history.replaceState({}, '', newUrl.toString());
+                      }}
+                      className="ml-2 text-blue-600 hover:text-blue-800"
+                    >
+                      ×
+                    </button>
+                  </span>
+                </div>
+              )}
             </div>
-            {(user?.customerType === 'lister' || !user?.customerType) && (
+            {user && (
               <Dialog open={showAddProductModal} onOpenChange={setShowAddProductModal}>
                 <DialogTrigger asChild>
                   <Button className="bg-rental-primary hover:bg-blue-700">
@@ -236,7 +263,7 @@ export default function Products() {
                   : "Be the first to add a product to the marketplace!"
                 }
               </p>
-              {(user?.customerType === 'lister' || !user?.customerType) && (
+              {user && (
                 <Button onClick={() => setShowAddProductModal(true)} className="bg-rental-primary hover:bg-blue-700">
                   Add Your First Product
                 </Button>

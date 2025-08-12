@@ -61,6 +61,8 @@ export default function AdminDashboard({}: AdminDashboardProps) {
   const [feedbackFilter, setFeedbackFilter] = useState('all');
   const [selectedFeedback, setSelectedFeedback] = useState<any>(null);
   const [replyText, setReplyText] = useState('');
+  const [deleteUserDialog, setDeleteUserDialog] = useState<string | null>(null);
+  const [deleteProductDialog, setDeleteProductDialog] = useState<string | null>(null);
 
   // Fetch admin statistics
   const { data: adminStats = {}, isLoading: statsLoading } = useQuery({
@@ -169,6 +171,52 @@ export default function AdminDashboard({}: AdminDashboardProps) {
       toast({
         title: "Archive Failed",
         description: "Failed to archive feedback. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete user mutation
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const response = await apiRequest("DELETE", `/api/admin/users/${userId}`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      toast({
+        title: "User Deleted",
+        description: "User has been deleted successfully.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Delete Failed",
+        description: "Failed to delete user. Please try again.",
+        variant: "destructive",
+      });
+    },
+  });
+
+  // Delete product mutation
+  const deleteProductMutation = useMutation({
+    mutationFn: async (productId: string) => {
+      const response = await apiRequest("DELETE", `/api/admin/products/${productId}`);
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/stats"] });
+      toast({
+        title: "Product Deleted",
+        description: "Product has been deleted successfully.",
+      });
+    },
+    onError: (error) => {
+      toast({
+        title: "Delete Failed",
+        description: "Failed to delete product. Please try again.",
         variant: "destructive",
       });
     },
@@ -607,6 +655,55 @@ export default function AdminDashboard({}: AdminDashboardProps) {
                                       </Button>
                                     )
                                   )}
+                                  {user.role !== 'admin' && (
+                                    <Dialog open={deleteUserDialog === user.id} onOpenChange={() => setDeleteUserDialog(null)}>
+                                      <DialogTrigger asChild>
+                                        <Button 
+                                          variant="destructive" 
+                                          size="sm"
+                                          onClick={() => setDeleteUserDialog(user.id)}
+                                        >
+                                          <XCircle className="w-4 h-4" />
+                                        </Button>
+                                      </DialogTrigger>
+                                      <DialogContent>
+                                        <DialogHeader>
+                                          <DialogTitle>Delete User</DialogTitle>
+                                        </DialogHeader>
+                                        <div className="space-y-4">
+                                          <p className="text-gray-600">
+                                            Are you sure you want to delete <strong>{user.firstName} {user.lastName}</strong>? 
+                                            This action cannot be undone and will permanently remove all their data including:
+                                          </p>
+                                          <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                                            <li>User account and profile</li>
+                                            <li>All their products and listings</li>
+                                            <li>All their bookings and rental history</li>
+                                            <li>All their feedback and reviews</li>
+                                            <li>All their wishlist items</li>
+                                          </ul>
+                                          <div className="flex space-x-2">
+                                            <Button 
+                                              variant="destructive"
+                                              onClick={() => {
+                                                deleteUserMutation.mutate(user.id);
+                                                setDeleteUserDialog(null);
+                                              }}
+                                              disabled={deleteUserMutation.isPending}
+                                            >
+                                              {deleteUserMutation.isPending ? 'Deleting...' : 'Delete User'}
+                                            </Button>
+                                            <Button 
+                                              variant="outline"
+                                              onClick={() => setDeleteUserDialog(null)}
+                                            >
+                                              Cancel
+                                            </Button>
+                                          </div>
+                                        </div>
+                                      </DialogContent>
+                                    </Dialog>
+                                  )}
                                 </div>
                               </td>
                             </tr>
@@ -700,22 +797,49 @@ export default function AdminDashboard({}: AdminDashboardProps) {
                                       <CheckCircle className="w-4 h-4" />
                                     </Button>
                                   )}
-                                  <Dialog>
+                                  <Dialog open={deleteProductDialog === product.id} onOpenChange={() => setDeleteProductDialog(null)}>
                                     <DialogTrigger asChild>
-                                      <Button variant="destructive" size="sm">
+                                      <Button 
+                                        variant="destructive" 
+                                        size="sm"
+                                        onClick={() => setDeleteProductDialog(product.id)}
+                                      >
                                         <XCircle className="w-4 h-4" />
                                       </Button>
                                     </DialogTrigger>
                                     <DialogContent>
                                       <DialogHeader>
-                                        <DialogTitle>Reject Product</DialogTitle>
+                                        <DialogTitle>Delete Product</DialogTitle>
                                       </DialogHeader>
                                       <div className="space-y-4">
-                                        <Label>Reason for rejection:</Label>
-                                        <Textarea placeholder="Enter reason..." />
-                                        <Button>
-                                          Reject Product
-                                        </Button>
+                                        <p className="text-gray-600">
+                                          Are you sure you want to delete <strong>{product.name}</strong>? 
+                                          This action cannot be undone and will permanently remove:
+                                        </p>
+                                        <ul className="list-disc list-inside text-sm text-gray-600 space-y-1">
+                                          <li>Product listing and all details</li>
+                                          <li>All pricing information</li>
+                                          <li>All associated bookings</li>
+                                          <li>All product images and media</li>
+                                        </ul>
+                                        <div className="flex space-x-2">
+                                          <Button 
+                                            variant="destructive"
+                                            onClick={() => {
+                                              deleteProductMutation.mutate(product.id);
+                                              setDeleteProductDialog(null);
+                                            }}
+                                            disabled={deleteProductMutation.isPending}
+                                          >
+                                            {deleteProductMutation.isPending ? 'Deleting...' : 'Delete Product'}
+                                          </Button>
+                                          <Button 
+                                            variant="outline"
+                                            onClick={() => setDeleteProductDialog(null)}
+                                          >
+                                            Cancel
+                                          </Button>
+                                        </div>
                                       </div>
                                     </DialogContent>
                                   </Dialog>

@@ -145,13 +145,7 @@ export default function LoginPage() {
                     <Label htmlFor="register-confirmPassword">Confirm password</Label>
                     <Input id="register-confirmPassword" type="password" required value={registerForm.confirmPassword} onChange={(e) => setRegisterForm(prev => ({ ...prev, confirmPassword: e.target.value }))} placeholder="Confirm your password" />
                   </div>
-                  <div>
-                    <Label>I want to</Label>
-                    <div className="flex space-x-4 mt-2">
-                      <label className="flex items-center"><input type="radio" name="customerType" value="lister" checked={registerForm.customerType === 'lister'} onChange={(e) => setRegisterForm(prev => ({ ...prev, customerType: e.target.value as 'lister' | 'renter' }))} className="mr-2" /> List items for rent</label>
-                      <label className="flex items-center"><input type="radio" name="customerType" value="renter" checked={registerForm.customerType === 'renter'} onChange={(e) => setRegisterForm(prev => ({ ...prev, customerType: e.target.value as 'lister' | 'renter' }))} className="mr-2" /> Rent items</label>
-                    </div>
-                  </div>
+
                   <Button type="submit" className="w-full bg-rental-primary hover:bg-blue-700" disabled={isLoading}>{isLoading ? 'Creating account...' : 'Create account'}</Button>
                 </form>
                 <div className="mt-4">

@@ -45,6 +45,18 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
     retry: false,
   });
 
+  // Fetch product rating
+  const { data: rating = { averageRating: 0, totalReviews: 0 } } = useQuery({
+    queryKey: ["/api/products", product?.id, "rating"],
+    queryFn: async () => {
+      if (!product?.id) return { averageRating: 0, totalReviews: 0 };
+      const response = await apiRequest("GET", `/api/products/${product.id}/rating`);
+      return response.json();
+    },
+    enabled: !!product?.id,
+    retry: false,
+  });
+
   // Check if product is in wishlist
   const { data: wishlistStatus = { isInWishlist: false } } = useQuery<{ isInWishlist: boolean }>({
     queryKey: ["/api/wishlist", product?.id, "check"],
@@ -291,7 +303,9 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
               )}
               <div className="flex items-center">
                 <Star className="w-4 h-4 mr-1 text-yellow-400" />
-                <span>4.8 (47 reviews)</span>
+                <span>
+                  {rating.averageRating > 0 ? `${rating.averageRating} (${rating.totalReviews} reviews)` : 'No reviews'}
+                </span>
               </div>
             </div>
             
