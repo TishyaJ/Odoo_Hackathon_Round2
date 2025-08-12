@@ -2,6 +2,7 @@
 Team members : Yuvraj Singh , Tishya Jha
 
 video link : https://drive.google.com/drive/folders/10HMccEHxnx-ypVKNR3WctD6sNv26-1bC
+
 A **modern, full-stack rental platform** connecting item owners with renters through a seamless booking experience. Built with cutting-edge technologies for scalability, RentalPro enables users to list, discover, and rent items with secure payments and full management tools.
 
 ---
