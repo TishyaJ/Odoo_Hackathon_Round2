@@ -15,6 +15,16 @@ import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/queryClient";
 import Navigation from "@/components/navigation";
 import {
+  exportToCSV,
+  exportUsersToPDF,
+  exportProductsToPDF,
+  exportBookingsToPDF,
+  exportAnalyticsToPDF,
+  exportFeedbackToPDF,
+  exportLogsToCSV,
+  exportLogsToPDF
+} from "@/lib/exportUtils";
+import {
   Users,
   Building2,
   Calendar,
@@ -63,6 +73,128 @@ export default function AdminDashboard({}: AdminDashboardProps) {
   const [replyText, setReplyText] = useState('');
   const [deleteUserDialog, setDeleteUserDialog] = useState<string | null>(null);
   const [deleteProductDialog, setDeleteProductDialog] = useState<string | null>(null);
+
+  // Export functions
+  const handleExportUsers = (format: 'csv' | 'pdf') => {
+    if (format === 'csv') {
+      const userData = users.map(user => ({
+        name: `${user.firstName} ${user.lastName}`,
+        email: user.email,
+        role: user.role,
+        status: user.isActive ? 'Active' : 'Inactive',
+        joinDate: new Date(user.createdAt).toLocaleDateString(),
+        itemsListed: user.itemsListed || 0,
+        totalBookings: user.totalBookings || 0
+      }));
+      exportToCSV(userData, 'users-report');
+    } else {
+      exportUsersToPDF(users);
+    }
+    toast({
+      title: "Export Successful",
+      description: `Users data exported as ${format.toUpperCase()}`,
+    });
+  };
+
+  const handleExportProducts = (format: 'csv' | 'pdf') => {
+    if (format === 'csv') {
+      const productData = products.map(product => ({
+        name: product.name,
+        category: product.category?.name || 'N/A',
+        owner: `${product.owner?.firstName} ${product.owner?.lastName}`,
+        price: `$${product.price}`,
+        status: product.isAvailable ? 'Available' : 'Unavailable',
+        listedDate: new Date(product.createdAt).toLocaleDateString(),
+        bookings: product.totalBookings || 0
+      }));
+      exportToCSV(productData, 'products-report');
+    } else {
+      exportProductsToPDF(products);
+    }
+    toast({
+      title: "Export Successful",
+      description: `Products data exported as ${format.toUpperCase()}`,
+    });
+  };
+
+  const handleExportBookings = (format: 'csv' | 'pdf') => {
+    if (format === 'csv') {
+      const bookingData = bookings.map(booking => ({
+        product: booking.product?.name || 'N/A',
+        customer: `${booking.customer?.firstName} ${booking.customer?.lastName}`,
+        startDate: new Date(booking.startDate).toLocaleDateString(),
+        endDate: new Date(booking.endDate).toLocaleDateString(),
+        amount: `$${booking.totalAmount}`,
+        status: booking.status,
+        bookedDate: new Date(booking.createdAt).toLocaleDateString()
+      }));
+      exportToCSV(bookingData, 'bookings-report');
+    } else {
+      exportBookingsToPDF(bookings);
+    }
+    toast({
+      title: "Export Successful",
+      description: `Bookings data exported as ${format.toUpperCase()}`,
+    });
+  };
+
+  const handleExportAnalytics = (format: 'csv' | 'pdf') => {
+    if (format === 'csv') {
+      const analyticsData = [
+        {
+          metric: 'Total Users',
+          value: adminStats.totalUsers || 0
+        },
+        {
+          metric: 'Total Products',
+          value: adminStats.totalProducts || 0
+        },
+        {
+          metric: 'Total Bookings',
+          value: adminStats.totalBookings || 0
+        },
+        {
+          metric: 'Active Rentals',
+          value: adminStats.activeRentals || 0
+        },
+        {
+          metric: 'Total Revenue',
+          value: `$${adminStats.totalRevenue || 0}`
+        },
+        {
+          metric: 'Monthly Revenue',
+          value: `$${adminStats.monthlyRevenue || 0}`
+        }
+      ];
+      exportToCSV(analyticsData, 'analytics-report');
+    } else {
+      exportAnalyticsToPDF(adminStats);
+    }
+    toast({
+      title: "Export Successful",
+      description: `Analytics data exported as ${format.toUpperCase()}`,
+    });
+  };
+
+  const handleExportFeedback = (format: 'csv' | 'pdf') => {
+    if (format === 'csv') {
+      const feedbackData = feedback.map(item => ({
+        user: `${item.user?.firstName} ${item.user?.lastName}`,
+        category: item.category,
+        subject: item.subject,
+        status: item.status,
+        date: new Date(item.createdAt).toLocaleDateString(),
+        response: item.reply ? 'Replied' : 'Pending'
+      }));
+      exportToCSV(feedbackData, 'feedback-report');
+    } else {
+      exportFeedbackToPDF(feedback);
+    }
+    toast({
+      title: "Export Successful",
+      description: `Feedback data exported as ${format.toUpperCase()}`,
+    });
+  };
 
   // Fetch admin statistics
   const { data: adminStats = {}, isLoading: statsLoading } = useQuery({
@@ -382,13 +514,14 @@ export default function AdminDashboard({}: AdminDashboardProps) {
 
         {/* Main Content Tabs */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="grid w-full grid-cols-5">
-            <TabsTrigger value="overview">Overview</TabsTrigger>
-            <TabsTrigger value="analytics">Analytics</TabsTrigger>
-            <TabsTrigger value="users">User Management</TabsTrigger>
-            <TabsTrigger value="products">Product Management</TabsTrigger>
-            <TabsTrigger value="feedback">Feedback</TabsTrigger>
-          </TabsList>
+                      <TabsList className="grid w-full grid-cols-6">
+              <TabsTrigger value="overview">Overview</TabsTrigger>
+              <TabsTrigger value="analytics">Analytics</TabsTrigger>
+              <TabsTrigger value="users">User Management</TabsTrigger>
+              <TabsTrigger value="products">Product Management</TabsTrigger>
+              <TabsTrigger value="feedback">Feedback</TabsTrigger>
+              <TabsTrigger value="logs">System Logs</TabsTrigger>
+            </TabsList>
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
@@ -562,7 +695,29 @@ export default function AdminDashboard({}: AdminDashboardProps) {
           <TabsContent value="analytics" className="space-y-6">
             <Card>
               <CardHeader>
-                <CardTitle>Analytics Dashboard</CardTitle>
+                <CardTitle className="flex items-center justify-between">
+                  <span>Analytics Dashboard</span>
+                  <div className="flex items-center space-x-1">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => handleExportAnalytics('csv')}
+                      className="text-green-600 hover:text-green-700"
+                    >
+                      <FileText className="w-4 h-4 mr-1" />
+                      CSV
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => handleExportAnalytics('pdf')}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <Download className="w-4 h-4 mr-1" />
+                      PDF
+                    </Button>
+                  </div>
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <p className="text-gray-500">Analytics content coming soon...</p>
@@ -581,6 +736,26 @@ export default function AdminDashboard({}: AdminDashboardProps) {
                     <Button variant="outline" size="sm">
                       <Search className="w-4 h-4" />
                     </Button>
+                    <div className="flex items-center space-x-1">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handleExportUsers('csv')}
+                        className="text-green-600 hover:text-green-700"
+                      >
+                        <FileText className="w-4 h-4 mr-1" />
+                        CSV
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handleExportUsers('pdf')}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <Download className="w-4 h-4 mr-1" />
+                        PDF
+                      </Button>
+                    </div>
                   </div>
                 </CardTitle>
               </CardHeader>
@@ -728,6 +903,26 @@ export default function AdminDashboard({}: AdminDashboardProps) {
                     <Button variant="outline" size="sm">
                       <Search className="w-4 h-4" />
                     </Button>
+                    <div className="flex items-center space-x-1">
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handleExportProducts('csv')}
+                        className="text-green-600 hover:text-green-700"
+                      >
+                        <FileText className="w-4 h-4 mr-1" />
+                        CSV
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        size="sm" 
+                        onClick={() => handleExportProducts('pdf')}
+                        className="text-red-600 hover:text-red-700"
+                      >
+                        <Download className="w-4 h-4 mr-1" />
+                        PDF
+                      </Button>
+                    </div>
                   </div>
                 </CardTitle>
               </CardHeader>
@@ -921,9 +1116,26 @@ export default function AdminDashboard({}: AdminDashboardProps) {
                             <SelectItem value="urgent">Urgent</SelectItem>
                           </SelectContent>
                         </Select>
-                        <Button variant="outline" size="sm">
-                          <Download className="w-4 h-4" />
-                        </Button>
+                        <div className="flex items-center space-x-1">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => handleExportFeedback('csv')}
+                            className="text-green-600 hover:text-green-700"
+                          >
+                            <FileText className="w-4 h-4 mr-1" />
+                            CSV
+                          </Button>
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={() => handleExportFeedback('pdf')}
+                            className="text-red-600 hover:text-red-700"
+                          >
+                            <Download className="w-4 h-4 mr-1" />
+                            PDF
+                          </Button>
+                        </div>
                       </div>
                     </CardTitle>
                   </CardHeader>
@@ -1037,6 +1249,154 @@ export default function AdminDashboard({}: AdminDashboardProps) {
                 </Card>
               </div>
             </div>
+          </TabsContent>
+
+          {/* System Logs Tab */}
+          <TabsContent value="logs" className="space-y-6">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  <span>System Logs</span>
+                  <div className="flex items-center space-x-1">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => {
+                        // Mock logs data for demonstration
+                        const mockLogs = [
+                          {
+                            timestamp: new Date().toISOString(),
+                            level: 'INFO',
+                            message: 'User login successful',
+                            userId: 'user123',
+                            action: 'LOGIN',
+                            ipAddress: '192.168.1.1'
+                          },
+                          {
+                            timestamp: new Date(Date.now() - 60000).toISOString(),
+                            level: 'WARN',
+                            message: 'Failed login attempt',
+                            userId: 'unknown',
+                            action: 'LOGIN_FAILED',
+                            ipAddress: '192.168.1.2'
+                          },
+                          {
+                            timestamp: new Date(Date.now() - 120000).toISOString(),
+                            level: 'ERROR',
+                            message: 'Database connection timeout',
+                            userId: 'system',
+                            action: 'DB_ERROR',
+                            ipAddress: 'localhost'
+                          }
+                        ];
+                        exportLogsToCSV(mockLogs, 'system-logs');
+                        toast({
+                          title: "Export Successful",
+                          description: "System logs exported as CSV",
+                        });
+                      }}
+                      className="text-green-600 hover:text-green-700"
+                    >
+                      <FileText className="w-4 h-4 mr-1" />
+                      CSV
+                    </Button>
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      onClick={() => {
+                        // Mock logs data for demonstration
+                        const mockLogs = [
+                          {
+                            timestamp: new Date().toISOString(),
+                            level: 'INFO',
+                            message: 'User login successful',
+                            userId: 'user123',
+                            action: 'LOGIN',
+                            ipAddress: '192.168.1.1'
+                          },
+                          {
+                            timestamp: new Date(Date.now() - 60000).toISOString(),
+                            level: 'WARN',
+                            message: 'Failed login attempt',
+                            userId: 'unknown',
+                            action: 'LOGIN_FAILED',
+                            ipAddress: '192.168.1.2'
+                          },
+                          {
+                            timestamp: new Date(Date.now() - 120000).toISOString(),
+                            level: 'ERROR',
+                            message: 'Database connection timeout',
+                            userId: 'system',
+                            action: 'DB_ERROR',
+                            ipAddress: 'localhost'
+                          }
+                        ];
+                        exportLogsToPDF(mockLogs);
+                        toast({
+                          title: "Export Successful",
+                          description: "System logs exported as PDF",
+                        });
+                      }}
+                      className="text-red-600 hover:text-red-700"
+                    >
+                      <Download className="w-4 h-4 mr-1" />
+                      PDF
+                    </Button>
+                  </div>
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-semibold">Recent System Activity</h3>
+                    <Badge variant="outline">Last 24 hours</Badge>
+                  </div>
+                  
+                  {/* Mock logs display */}
+                  <div className="space-y-3 max-h-96 overflow-y-auto">
+                    <div className="flex items-center space-x-3 p-3 bg-green-50 rounded-lg">
+                      <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">INFO</span>
+                          <span className="text-xs text-gray-500">2 minutes ago</span>
+                        </div>
+                        <p className="text-sm text-gray-700">User login successful</p>
+                        <p className="text-xs text-gray-500">User: user123 | Action: LOGIN | IP: 192.168.1.1</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center space-x-3 p-3 bg-yellow-50 rounded-lg">
+                      <div className="w-2 h-2 bg-yellow-500 rounded-full"></div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">WARN</span>
+                          <span className="text-xs text-gray-500">1 minute ago</span>
+                        </div>
+                        <p className="text-sm text-gray-700">Failed login attempt</p>
+                        <p className="text-xs text-gray-500">User: unknown | Action: LOGIN_FAILED | IP: 192.168.1.2</p>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center space-x-3 p-3 bg-red-50 rounded-lg">
+                      <div className="w-2 h-2 bg-red-500 rounded-full"></div>
+                      <div className="flex-1">
+                        <div className="flex items-center justify-between">
+                          <span className="text-sm font-medium">ERROR</span>
+                          <span className="text-xs text-gray-500">2 minutes ago</span>
+                        </div>
+                        <p className="text-sm text-gray-700">Database connection timeout</p>
+                        <p className="text-xs text-gray-500">User: system | Action: DB_ERROR | IP: localhost</p>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  <div className="text-center text-sm text-gray-500">
+                    <p>Showing recent system logs. Use export buttons to download full logs.</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
