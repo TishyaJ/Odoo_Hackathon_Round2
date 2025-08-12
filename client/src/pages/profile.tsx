@@ -145,6 +145,36 @@ export default function Profile() {
     }
   };
 
+  // Delete booking mutation
+  const deleteBookingMutation = useMutation({
+    mutationFn: async (bookingId: string) => {
+      const response = await apiRequest("DELETE", `/api/bookings/${bookingId}`);
+      if (!response.ok) throw new Error("Failed to delete booking");
+      return;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Booking Deleted",
+        description: "Your booking has been deleted successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/user/stats"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Delete Failed",
+        description: error.message || "Failed to delete booking",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDeleteBooking = (bookingId: string) => {
+    if (window.confirm("Are you sure you want to delete this booking? This action cannot be undone.")) {
+      deleteBookingMutation.mutate(bookingId);
+    }
+  };
+
   const handleSaveProfile = () => {
     updateProfileMutation.mutate(profileData);
   };
@@ -403,15 +433,25 @@ export default function Profile() {
                                 {new Date(booking.startDate).toLocaleDateString()} - {new Date(booking.endDate).toLocaleDateString()}
                               </p>
                             </div>
-                            <div className="text-right">
-                              <Badge className={
-                                booking.status === 'active' ? 'bg-green-500' :
-                                booking.status === 'completed' ? 'bg-blue-500' :
-                                'bg-gray-500'
-                              }>
-                                {booking.status}
-                              </Badge>
-                              <p className="text-sm font-medium mt-1">${booking.totalAmount}</p>
+                            <div className="flex items-center space-x-2">
+                              <div className="text-right">
+                                <Badge className={
+                                  booking.status === 'active' ? 'bg-green-500' :
+                                  booking.status === 'completed' ? 'bg-blue-500' :
+                                  'bg-gray-500'
+                                }>
+                                  {booking.status}
+                                </Badge>
+                                <p className="text-sm font-medium mt-1">${booking.totalAmount}</p>
+                              </div>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => handleDeleteBooking(booking.id)}
+                                disabled={deleteBookingMutation.isPending}
+                              >
+                                {deleteBookingMutation.isPending ? "Deleting..." : "Delete"}
+                              </Button>
                             </div>
                           </div>
                         ))}

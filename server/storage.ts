@@ -77,6 +77,7 @@ export interface IStorage {
   getBooking(id: string): Promise<Booking | undefined>;
   createBooking(booking: InsertBooking): Promise<Booking>;
   updateBooking(id: string, booking: Partial<InsertBooking>): Promise<Booking>;
+  deleteBooking(id: string): Promise<void>;
   checkAvailability(productId: string, startDate: Date, endDate: Date, excludeBookingId?: string): Promise<boolean>;
   
   // Late fees operations
@@ -152,6 +153,13 @@ export interface IStorage {
     bookingsByCategory: Array<{ category: string; count: number; revenue: number }>;
     monthlyRevenue: Array<{ month: string; revenue: number }>;
     topProducts: Array<{ name: string; bookings: number; revenue: number }>;
+    paymentAnalytics: {
+      totalPayments: number;
+      successfulPayments: number;
+      pendingPayments: number;
+      averagePaymentAmount: number;
+      paymentMethods: Array<{ method: string; count: number }>;
+    };
   }>;
 }
 
@@ -376,6 +384,10 @@ export class DatabaseStorage implements IStorage {
       .where(eq(bookings.id, id))
       .returning();
     return updatedBooking;
+  }
+
+  async deleteBooking(id: string): Promise<void> {
+    await db.delete(bookings).where(eq(bookings.id, id));
   }
 
   async checkAvailability(productId: string, startDate: Date, endDate: Date, excludeBookingId?: string): Promise<boolean> {
@@ -647,6 +659,13 @@ export class DatabaseStorage implements IStorage {
     bookingsByCategory: Array<{ category: string; count: number; revenue: number }>;
     monthlyRevenue: Array<{ month: string; revenue: number }>;
     topProducts: Array<{ name: string; bookings: number; revenue: number }>;
+    paymentAnalytics: {
+      totalPayments: number;
+      successfulPayments: number;
+      pendingPayments: number;
+      averagePaymentAmount: number;
+      paymentMethods: Array<{ method: string; count: number }>;
+    };
   }> {
     try {
       console.log('📊 Calculating owner analytics for:', ownerId);
@@ -665,6 +684,13 @@ export class DatabaseStorage implements IStorage {
           bookingsByCategory: [],
           monthlyRevenue: [],
           topProducts: [],
+          paymentAnalytics: {
+            totalPayments: 0,
+            successfulPayments: 0,
+            pendingPayments: 0,
+            averagePaymentAmount: 0,
+            paymentMethods: [],
+          },
         };
       }
       
@@ -757,6 +783,39 @@ export class DatabaseStorage implements IStorage {
         .sort((a, b) => b.revenue - a.revenue)
         .slice(0, 5);
       
+      // Payment Analytics
+      const successfulPayments = ownerBookings.filter(b => b.status === 'confirmed' || b.status === 'active' || b.status === 'completed').length;
+      const pendingPayments = ownerBookings.filter(b => b.status === 'reserved').length;
+      const totalPayments = successfulPayments + pendingPayments;
+      
+      const paymentAmounts = ownerBookings
+        .filter(b => b.status === 'confirmed' || b.status === 'active' || b.status === 'completed')
+        .map(b => parseFloat(b.totalAmount || '0'));
+      
+      const averagePaymentAmount = paymentAmounts.length > 0 
+        ? paymentAmounts.reduce((sum, amount) => sum + amount, 0) / paymentAmounts.length 
+        : 0;
+      
+      // Payment methods analysis
+      const paymentMethods = new Map<string, number>();
+      ownerBookings.forEach(booking => {
+        if (booking.razorpayPaymentId) {
+          const current = paymentMethods.get('Razorpay') || 0;
+          paymentMethods.set('Razorpay', current + 1);
+        } else if (booking.stripePaymentIntentId) {
+          const current = paymentMethods.get('Stripe') || 0;
+          paymentMethods.set('Stripe', current + 1);
+        } else if (booking.status === 'confirmed' || booking.status === 'active' || booking.status === 'completed') {
+          const current = paymentMethods.get('Other') || 0;
+          paymentMethods.set('Other', current + 1);
+        }
+      });
+      
+      const paymentMethodsArray = Array.from(paymentMethods.entries()).map(([method, count]) => ({
+        method,
+        count
+      }));
+      
       const analytics = {
         totalRevenue,
         totalBookings,
@@ -766,6 +825,13 @@ export class DatabaseStorage implements IStorage {
         bookingsByCategory,
         monthlyRevenue,
         topProducts,
+        paymentAnalytics: {
+          totalPayments,
+          successfulPayments,
+          pendingPayments,
+          averagePaymentAmount,
+          paymentMethods: paymentMethodsArray,
+        },
       };
       
       console.log('📊 Calculated owner analytics:', analytics);
@@ -781,6 +847,13 @@ export class DatabaseStorage implements IStorage {
         bookingsByCategory: [],
         monthlyRevenue: [],
         topProducts: [],
+        paymentAnalytics: {
+          totalPayments: 0,
+          successfulPayments: 0,
+          pendingPayments: 0,
+          averagePaymentAmount: 0,
+          paymentMethods: [],
+        },
       };
     }
   }

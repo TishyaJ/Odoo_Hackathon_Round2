@@ -11,7 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { apiRequest } from "@/lib/queryClient";
 import { isUnauthorizedError } from "@/lib/authUtils";
-import { Calendar, MapPin, Star, User, Plus, Minus, Package, Heart } from "lucide-react";
+import { Calendar, MapPin, Star, User, Plus, Minus, Package, Heart, Clock } from "lucide-react";
+import RazorpayPayment from "./razorpay-payment";
 
 interface BookingModalProps {
   product: any;
@@ -28,8 +29,10 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
   const [booking, setBooking] = useState({
     startDate: '',
     endDate: '',
+    startTime: '',
+    endTime: '',
     quantity: 1,
-    durationType: 'hourly' as string, // Always hourly
+    durationType: 'hourly' as string,
   });
   
   const [pricing, setPricing] = useState({
@@ -38,6 +41,9 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
     serviceFee: 8.50,
     total: 0,
   });
+
+  const [showPayment, setShowPayment] = useState(false);
+  const [createdBooking, setCreatedBooking] = useState<any>(null);
 
   const { data: productPricing = [] } = useQuery<any[]>({
     queryKey: ["/api/products", product?.id, "pricing"],
@@ -70,13 +76,15 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
   });
 
   const { data: availability = { available: true } } = useQuery<{ available: boolean }>({
-    queryKey: ["/api/products", product?.id, "check-availability", booking.startDate, booking.endDate],
+    queryKey: ["/api/products", product?.id, "check-availability", booking.startDate, booking.endDate, booking.startTime, booking.endTime],
     queryFn: async () => {
       if (!booking.startDate || !booking.endDate) return { available: true };
       
       const response = await apiRequest("POST", `/api/products/${product.id}/check-availability`, {
         startDate: booking.startDate,
         endDate: booking.endDate,
+        startTime: booking.startTime,
+        endTime: booking.endTime,
       });
       return response.json();
     },
@@ -91,12 +99,8 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["/api/bookings"] });
-      toast({
-        title: "Booking Created",
-        description: "Your rental has been reserved successfully!",
-      });
-      onClose();
-      // Optionally redirect to checkout or booking details
+      setCreatedBooking(data);
+      setShowPayment(true);
     },
     onError: (error) => {
       if (isUnauthorizedError(error as Error)) {
@@ -151,6 +155,15 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
 
     const startDate = new Date(booking.startDate);
     const endDate = new Date(booking.endDate);
+    
+    // For hourly bookings, include time in calculation
+    if (booking.durationType === 'hourly' && booking.startTime && booking.endTime) {
+      const [startHour, startMinute] = booking.startTime.split(':').map(Number);
+      const [endHour, endMinute] = booking.endTime.split(':').map(Number);
+      startDate.setHours(startHour, startMinute, 0, 0);
+      endDate.setHours(endHour, endMinute, 0, 0);
+    }
+    
     const timeDiff = endDate.getTime() - startDate.getTime();
     
     // Calculate duration based on the selected duration type
@@ -165,8 +178,8 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
       case 'weekly':
         duration = Math.max(1, Math.ceil(timeDiff / (1000 * 60 * 60 * 24 * 7)));
         break;
-      case 'yearly':
-        duration = Math.max(1, Math.ceil(timeDiff / (1000 * 60 * 60 * 24 * 365)));
+      case 'monthly':
+        duration = Math.max(1, Math.ceil(timeDiff / (1000 * 60 * 60 * 24 * 30)));
         break;
       default:
         duration = Math.max(1, Math.ceil(timeDiff / (1000 * 60 * 60))); // Default to hourly
@@ -241,6 +254,16 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
       return;
     }
 
+    // For hourly bookings, require time selection
+    if (booking.durationType === 'hourly' && (!booking.startTime || !booking.endTime)) {
+      toast({
+        title: "Missing Time",
+        description: "Please select start and end times for hourly rental.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     if (availability && !availability.available) {
       toast({
         title: "Not Available",
@@ -254,6 +277,8 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
       productId: product.id,
       startDate: booking.startDate,
       endDate: booking.endDate,
+      startTime: booking.startTime,
+      endTime: booking.endTime,
       quantity: booking.quantity,
       durationType: booking.durationType,
       basePrice: pricing.basePrice.toString(),
@@ -263,6 +288,16 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
     };
 
     createBookingMutation.mutate(bookingData);
+  };
+
+  const handlePaymentSuccess = () => {
+    toast({
+      title: "Booking Confirmed! 🎉",
+      description: "Your rental has been confirmed and payment processed successfully!",
+    });
+    setShowPayment(false);
+    setCreatedBooking(null);
+    onClose();
   };
 
   if (!product) return null;
@@ -332,13 +367,13 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
             
             {/* Pricing Options */}
             <div className="mb-6">
-              <Label className="text-sm font-medium text-gray-700 mb-3">💰 Pricing Options</Label>
+              <Label className="text-sm font-medium text-gray-700 mb-3">💰 Available Pricing Options</Label>
               <div className="space-y-3">
                 {[
                   { key: 'hourly', label: 'Per Hour', icon: '⏰', color: 'blue' },
                   { key: 'daily', label: 'Per Day', icon: '📅', color: 'green' },
                   { key: 'weekly', label: 'Per Week', icon: '📆', color: 'purple' },
-                  { key: 'yearly', label: 'Per Year', icon: '📊', color: 'orange' },
+                  { key: 'monthly', label: 'Per Month', icon: '📊', color: 'orange' },
                 ].map(({ key, label, icon, color }) => {
                   const pricingItem = productPricing?.find((p: any) => p.durationType === key);
                   if (!pricingItem) return null;
@@ -351,7 +386,7 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
                           <h5 className={`font-medium text-${color}-900`}>{label}</h5>
                         </div>
                         <Badge className={`bg-${color}-500 text-white text-xs`}>
-                          ${pricingItem.basePrice}/{key === 'hourly' ? 'hour' : key === 'daily' ? 'day' : key === 'weekly' ? 'week' : 'year'}
+                          ${pricingItem.basePrice}/{key === 'hourly' ? 'hour' : key === 'daily' ? 'day' : key === 'weekly' ? 'week' : 'month'}
                         </Badge>
                       </div>
                       <div className="grid grid-cols-2 gap-2 text-xs">
@@ -378,7 +413,7 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
                   { key: 'hourly', label: 'Hourly', icon: '⏰' },
                   { key: 'daily', label: 'Daily', icon: '📅' },
                   { key: 'weekly', label: 'Weekly', icon: '📆' },
-                  { key: 'yearly', label: 'Yearly', icon: '📊' },
+                  { key: 'monthly', label: 'Monthly', icon: '📊' },
                 ].map(({ key, label, icon }) => {
                   const pricingItem = productPricing?.find((p: any) => p.durationType === key);
                   if (!pricingItem) return null;
@@ -401,27 +436,74 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
               </div>
             </div>
             
-            {/* Date Selection */}
-            <div className="grid grid-cols-2 gap-4 mb-6">
-              <div>
-                <Label className="text-sm font-medium text-gray-700 mb-2">Start Date</Label>
-                <Input
-                  type="date"
-                  value={booking.startDate}
-                  onChange={(e) => handleBookingChange('startDate', e.target.value)}
-                  min={new Date().toISOString().split('T')[0]}
-                />
+            {/* Date/Time Selection */}
+            {booking.durationType === 'hourly' ? (
+              // Hourly booking - show date and time inputs
+              <div className="space-y-4 mb-6">
+                <div>
+                  <Label className="text-sm font-medium text-gray-700 mb-2">📅 Select Date</Label>
+                  <Input
+                    type="date"
+                    value={booking.startDate}
+                    onChange={(e) => handleBookingChange('startDate', e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                      <Clock className="w-4 h-4 mr-1" />
+                      Start Time
+                    </Label>
+                    <Input
+                      type="time"
+                      value={booking.startTime}
+                      onChange={(e) => handleBookingChange('startTime', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                      <Clock className="w-4 h-4 mr-1" />
+                      End Time
+                    </Label>
+                    <Input
+                      type="time"
+                      value={booking.endTime}
+                      onChange={(e) => handleBookingChange('endTime', e.target.value)}
+                      min={booking.startTime}
+                    />
+                  </div>
+                </div>
               </div>
-              <div>
-                <Label className="text-sm font-medium text-gray-700 mb-2">End Date</Label>
-                <Input
-                  type="date"
-                  value={booking.endDate}
-                  onChange={(e) => handleBookingChange('endDate', e.target.value)}
-                  min={booking.startDate || new Date().toISOString().split('T')[0]}
-                />
+            ) : (
+              // Daily/Weekly/Monthly booking - show calendar inputs
+              <div className="grid grid-cols-2 gap-4 mb-6">
+                <div>
+                  <Label className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                    <Calendar className="w-4 h-4 mr-1" />
+                    Start Date
+                  </Label>
+                  <Input
+                    type="date"
+                    value={booking.startDate}
+                    onChange={(e) => handleBookingChange('startDate', e.target.value)}
+                    min={new Date().toISOString().split('T')[0]}
+                  />
+                </div>
+                <div>
+                  <Label className="text-sm font-medium text-gray-700 mb-2 flex items-center">
+                    <Calendar className="w-4 h-4 mr-1" />
+                    End Date
+                  </Label>
+                  <Input
+                    type="date"
+                    value={booking.endDate}
+                    onChange={(e) => handleBookingChange('endDate', e.target.value)}
+                    min={booking.startDate || new Date().toISOString().split('T')[0]}
+                  />
+                </div>
               </div>
-            </div>
+            )}
             
             {/* Quantity */}
             <div className="mb-6">
@@ -457,13 +539,13 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
                     <span className="text-gray-600">
                       {booking.durationType === 'hourly' ? 'Hourly' : 
                        booking.durationType === 'daily' ? 'Daily' : 
-                       booking.durationType === 'weekly' ? 'Weekly' : 'Yearly'} rate
+                       booking.durationType === 'weekly' ? 'Weekly' : 'Monthly'} rate
                     </span>
                     <span className="text-gray-900">
                       ${productPricing?.find((p: any) => p.durationType === booking.durationType)?.basePrice || 0}/
                       {booking.durationType === 'hourly' ? 'hour' : 
                        booking.durationType === 'daily' ? 'day' : 
-                       booking.durationType === 'weekly' ? 'week' : 'year'}
+                       booking.durationType === 'weekly' ? 'week' : 'month'}
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -473,17 +555,26 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
                         (() => {
                           const startDate = new Date(booking.startDate);
                           const endDate = new Date(booking.endDate);
+                          
+                          // For hourly bookings, include time in calculation
+                          if (booking.durationType === 'hourly' && booking.startTime && booking.endTime) {
+                            const [startHour, startMinute] = booking.startTime.split(':').map(Number);
+                            const [endHour, endMinute] = booking.endTime.split(':').map(Number);
+                            startDate.setHours(startHour, startMinute, 0, 0);
+                            endDate.setHours(endHour, endMinute, 0, 0);
+                          }
+                          
                           const diffTime = Math.abs(endDate.getTime() - startDate.getTime());
                           const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                           const diffHours = Math.ceil(diffTime / (1000 * 60 * 60));
                           const diffWeeks = Math.ceil(diffDays / 7);
-                          const diffYears = Math.ceil(diffDays / 365);
+                          const diffMonths = Math.ceil(diffDays / 30);
                           
                           switch(booking.durationType) {
                             case 'hourly': return `${Math.max(1, diffHours)} hours`;
                             case 'daily': return `${Math.max(1, diffDays)} days`;
                             case 'weekly': return `${Math.max(1, diffWeeks)} weeks`;
-                            case 'yearly': return `${Math.max(1, diffYears)} years`;
+                            case 'monthly': return `${Math.max(1, diffMonths)} months`;
                             default: return `${Math.max(1, diffHours)} hours`;
                           }
                         })() : 
@@ -561,6 +652,7 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
                     createBookingMutation.isPending || 
                     !booking.startDate || 
                     !booking.endDate || 
+                    (booking.durationType === 'hourly' && (!booking.startTime || !booking.endTime)) ||
                     (availability && !availability.available)
                   }
                 >
@@ -570,7 +662,7 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
                       Creating Booking...
                     </div>
                   ) : (
-                    'Get Quote & Continue'
+                    'Proceed to Payment'
                   )}
                 </Button>
               )}
@@ -582,6 +674,20 @@ export default function BookingModal({ product, isOpen, onClose, durationOptions
           </div>
         </div>
       </DialogContent>
+
+      {/* Razorpay Payment Modal */}
+      {showPayment && createdBooking && (
+        <RazorpayPayment
+          booking={createdBooking}
+          product={product}
+          isOpen={showPayment}
+          onClose={() => {
+            setShowPayment(false);
+            setCreatedBooking(null);
+          }}
+          onSuccess={handlePaymentSuccess}
+        />
+      )}
     </Dialog>
   );
 }

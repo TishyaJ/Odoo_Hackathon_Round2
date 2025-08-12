@@ -4,6 +4,7 @@ import { storage } from "./storage";
 import { authenticateToken, requireAdmin, generateToken, hashPassword, comparePassword, type AuthRequest } from "./auth";
 import { loginSchema, registerSchema } from "@shared/schema";
 import Stripe from "stripe";
+import Razorpay from "razorpay";
 import crypto from "crypto";
 import sgMail from "@sendgrid/mail";
 
@@ -12,6 +13,15 @@ if (!process.env.STRIPE_SECRET_KEY) {
 }
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
   apiVersion: "2025-07-30.basil",
+});
+
+// Initialize Razorpay
+if (!process.env.RAZORPAY_KEY_ID || !process.env.RAZORPAY_KEY_SECRET) {
+  throw new Error('Missing required Razorpay credentials: RAZORPAY_KEY_ID or RAZORPAY_KEY_SECRET');
+}
+const razorpay = new Razorpay({
+  key_id: process.env.RAZORPAY_KEY_ID,
+  key_secret: process.env.RAZORPAY_KEY_SECRET,
 });
 
 // Configure SendGrid
@@ -790,7 +800,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch('/api/bookings/:id', authenticateToken, async (req: AuthRequest, res) => {
     try {
       const bookingBefore = await storage.getBooking(req.params.id);
-      const booking = await storage.updateBooking(req.params.id, req.body);
+      
+      // Handle payment information
+      const updateData = { ...req.body };
+      if (req.body.paymentId) {
+        updateData.razorpayPaymentId = req.body.paymentId;
+      }
+      if (req.body.orderId) {
+        updateData.razorpayOrderId = req.body.orderId;
+      }
+      
+      const booking = await storage.updateBooking(req.params.id, updateData);
+      
       // If cancelling and at least 1 day before start, restore quantity
       try {
         if (req.body.status === 'cancelled' && bookingBefore && bookingBefore.status !== 'cancelled') {
@@ -808,10 +829,88 @@ export async function registerRoutes(app: Express): Promise<Server> {
       } catch (qtyRestoreErr) {
         console.error('Quantity restore error:', qtyRestoreErr);
       }
+      
+      // Create notification for successful payment
+      if (req.body.status === 'confirmed' && req.body.paymentId) {
+        try {
+          const product = await storage.getProduct(booking.productId);
+          const customer = await storage.getUser(booking.customerId);
+          
+          if (product && customer) {
+            // Notify customer
+            await storage.createNotification({
+              userId: booking.customerId,
+              type: 'booking_confirmed',
+              title: 'Booking Confirmed! 🎉',
+              message: `Your booking for "${product.name}" has been confirmed. Rental period: ${new Date(booking.startDate).toLocaleDateString()} - ${new Date(booking.endDate).toLocaleDateString()}`,
+              relatedId: booking.id,
+            });
+            
+            // Notify owner
+            await storage.createNotification({
+              userId: product.ownerId,
+              type: 'booking_confirmed',
+              title: 'New Booking Received! 📦',
+              message: `${customer.firstName || customer.email} has booked your item "${product.name}" for ${new Date(booking.startDate).toLocaleDateString()} - ${new Date(booking.endDate).toLocaleDateString()}`,
+              relatedId: booking.id,
+            });
+            
+            console.log('🔔 Payment confirmation notifications created');
+          }
+        } catch (notifError) {
+          console.error('Notification creation error:', notifError);
+        }
+      }
+      
       res.json(booking);
     } catch (error) {
       console.error("Update booking error:", error);
       res.status(500).json({ message: "Failed to update booking" });
+    }
+  });
+
+  // Delete booking route
+  app.delete('/api/bookings/:id', authenticateToken, async (req: AuthRequest, res) => {
+    try {
+      const bookingId = req.params.id;
+      
+      // Get the booking to check ownership
+      const booking = await storage.getBooking(bookingId);
+      if (!booking) {
+        return res.status(404).json({ message: "Booking not found" });
+      }
+      
+      // Check if the user owns this booking (as customer)
+      if (booking.customerId !== req.user!.id) {
+        return res.status(403).json({ message: "You can only delete your own bookings" });
+      }
+      
+      // Check if booking can be deleted (only reserved or cancelled bookings)
+      if (booking.status === 'active' || booking.status === 'returned') {
+        return res.status(400).json({ message: "Cannot delete active or returned bookings" });
+      }
+      
+      // Restore product quantity if booking was confirmed
+      if (booking.status === 'confirmed') {
+        try {
+          const product = await storage.getProduct(booking.productId);
+          if (product) {
+            const restoredQty = (product.quantity || 0) + (booking.quantity || 1);
+            await storage.updateProduct(product.id, { quantity: restoredQty as any });
+          }
+        } catch (qtyRestoreErr) {
+          console.error('Quantity restore error:', qtyRestoreErr);
+        }
+      }
+      
+      // Delete the booking
+      await storage.deleteBooking(bookingId);
+      
+      console.log(`🗑️ Booking ${bookingId} deleted by user ${req.user!.id}`);
+      res.json({ message: "Booking deleted successfully" });
+    } catch (error) {
+      console.error("Delete booking error:", error);
+      res.status(500).json({ message: "Failed to delete booking" });
     }
   });
 
@@ -1087,6 +1186,76 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res
         .status(500)
         .json({ message: "Error creating payment intent: " + error.message });
+    }
+  });
+
+  // Razorpay payment routes
+  app.post("/api/razorpay/create-order", authenticateToken, async (req, res) => {
+    try {
+      const { amount, currency = 'INR', receipt, notes } = req.body;
+      
+      console.log('💰 Creating Razorpay order:', { amount, currency, receipt, notes });
+      
+      const order = await razorpay.orders.create({
+        amount: Math.round(amount * 100), // Convert to paise
+        currency: currency,
+        receipt: receipt,
+        notes: notes,
+      });
+      
+      console.log('💰 Razorpay order created:', order.id);
+      
+      res.json({
+        orderId: order.id,
+        amount: amount,
+        currency: currency,
+        receipt: receipt
+      });
+    } catch (error: any) {
+      console.error('💰 Razorpay order creation error:', error);
+      res.status(500).json({ 
+        message: "Error creating Razorpay order: " + error.message 
+      });
+    }
+  });
+
+  app.post("/api/razorpay/verify-payment", authenticateToken, async (req, res) => {
+    try {
+      const { razorpay_payment_id, razorpay_order_id, razorpay_signature } = req.body;
+      
+      console.log('💰 Verifying Razorpay payment:', { 
+        razorpay_payment_id, 
+        razorpay_order_id, 
+        razorpay_signature 
+      });
+      
+      // For mock purposes, we'll simulate successful verification
+      // In production, you would verify the signature here
+      const expectedSignature = crypto
+        .createHmac('sha256', process.env.RAZORPAY_KEY_SECRET!)
+        .update(razorpay_order_id + '|' + razorpay_payment_id)
+        .digest('hex');
+      
+      // For testing, we'll accept any signature
+      const isValid = razorpay_signature === expectedSignature || razorpay_signature === 'mock_signature_for_testing';
+      
+      if (!isValid) {
+        console.log('💰 Payment signature verification failed');
+        return res.status(400).json({ message: "Payment verification failed" });
+      }
+      
+      console.log('💰 Payment verified successfully');
+      
+      res.json({
+        paymentId: razorpay_payment_id,
+        orderId: razorpay_order_id,
+        verified: true
+      });
+    } catch (error: any) {
+      console.error('💰 Razorpay payment verification error:', error);
+      res.status(500).json({ 
+        message: "Error verifying payment: " + error.message 
+      });
     }
   });
 

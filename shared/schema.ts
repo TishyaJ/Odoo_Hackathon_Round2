@@ -136,6 +136,8 @@ export const bookings = pgTable("bookings", {
   lateFee: decimal("late_fee", { precision: 10, scale: 2 }).default('0'),
   totalAmount: decimal("total_amount", { precision: 10, scale: 2 }).notNull(),
   stripePaymentIntentId: varchar("stripe_payment_intent_id"),
+  razorpayOrderId: varchar("razorpay_order_id"),
+  razorpayPaymentId: varchar("razorpay_payment_id"),
   notes: text("notes"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),

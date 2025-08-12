@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -28,6 +28,7 @@ import {
   Clock,
   CheckCircle,
   AlertTriangle,
+  CreditCard,
 } from "lucide-react";
 
 interface OwnerDashboardProps {}
@@ -37,6 +38,7 @@ export default function OwnerDashboard({}: OwnerDashboardProps) {
   const { toast } = useToast();
   const [location, setLocation] = useLocation();
   const [activeTab, setActiveTab] = useState('overview');
+  const queryClient = useQueryClient();
 
   // Redirect if not authenticated
   if (!isLoading && !user) {
@@ -56,6 +58,13 @@ export default function OwnerDashboard({}: OwnerDashboardProps) {
     bookingsByCategory: [],
     monthlyRevenue: [],
     topProducts: [],
+    paymentAnalytics: {
+      totalPayments: 0,
+      successfulPayments: 0,
+      pendingPayments: 0,
+      averagePaymentAmount: 0,
+      paymentMethods: [],
+    },
   }, isLoading: analyticsLoading, refetch: refetchAnalytics } = useQuery({
     queryKey: ["/api/owner/analytics"],
     queryFn: async () => {
@@ -98,6 +107,36 @@ export default function OwnerDashboard({}: OwnerDashboardProps) {
       title: "Refreshed",
       description: "Analytics data has been updated.",
     });
+  };
+
+  // Delete product mutation
+  const deleteProductMutation = useMutation({
+    mutationFn: async (productId: string) => {
+      const response = await apiRequest("DELETE", `/api/products/${productId}`);
+      if (!response.ok) throw new Error("Failed to delete product");
+      return;
+    },
+    onSuccess: () => {
+      toast({
+        title: "Product Removed",
+        description: "Your listing has been removed from the catalog successfully.",
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/products"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/owner/analytics"] });
+    },
+    onError: (error) => {
+      toast({
+        title: "Delete Failed",
+        description: error.message || "Failed to delete product",
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDeleteProduct = (productId: string) => {
+    if (window.confirm("Are you sure you want to delete this listing? This action cannot be undone.")) {
+      deleteProductMutation.mutate(productId);
+    }
   };
 
   const getStatusColor = (status: string) => {
@@ -160,13 +199,13 @@ export default function OwnerDashboard({}: OwnerDashboardProps) {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Total Bookings</p>
+                  <p className="text-sm font-medium text-gray-600">Successful Payments</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {analyticsLoading ? "..." : analytics.totalBookings}
+                    {analyticsLoading ? "..." : (analytics.paymentAnalytics?.successfulPayments || 0)}
                   </p>
-                  <p className="text-xs text-blue-600">All time bookings</p>
+                  <p className="text-xs text-green-600">Paid bookings</p>
                 </div>
-                <Calendar className="w-8 h-8 text-blue-500" />
+                <CheckCircle className="w-8 h-8 text-green-500" />
               </div>
             </CardContent>
           </Card>
@@ -190,13 +229,13 @@ export default function OwnerDashboard({}: OwnerDashboardProps) {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-600">Unique Renters</p>
+                  <p className="text-sm font-medium text-gray-600">Avg Payment</p>
                   <p className="text-2xl font-bold text-gray-900">
-                    {analyticsLoading ? "..." : analytics.uniqueRenters}
+                    ${analyticsLoading ? "..." : (analytics.paymentAnalytics?.averagePaymentAmount || 0).toFixed(2)}
                   </p>
-                  <p className="text-xs text-orange-600">Different customers</p>
+                  <p className="text-xs text-orange-600">Per booking</p>
                 </div>
-                <Users className="w-8 h-8 text-orange-500" />
+                <CreditCard className="w-8 h-8 text-orange-500" />
               </div>
             </CardContent>
           </Card>
@@ -392,6 +431,64 @@ export default function OwnerDashboard({}: OwnerDashboardProps) {
                   )}
                 </CardContent>
               </Card>
+
+              {/* Payment Analytics */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center">
+                    <CreditCard className="w-5 h-5 mr-2" />
+                    Payment Analytics
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {analyticsLoading ? (
+                    <div className="space-y-3">
+                      {[1, 2, 3].map((i) => (
+                        <div key={i} className="animate-pulse">
+                          <div className="h-4 bg-gray-200 rounded w-3/4 mb-2"></div>
+                          <div className="h-3 bg-gray-200 rounded w-1/2"></div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="p-3 bg-green-50 rounded-lg">
+                          <p className="text-sm font-medium text-green-700">Successful Payments</p>
+                          <p className="text-2xl font-bold text-green-600">
+                            {analytics.paymentAnalytics?.successfulPayments || 0}
+                          </p>
+                        </div>
+                        <div className="p-3 bg-yellow-50 rounded-lg">
+                          <p className="text-sm font-medium text-yellow-700">Pending Payments</p>
+                          <p className="text-2xl font-bold text-yellow-600">
+                            {analytics.paymentAnalytics?.pendingPayments || 0}
+                          </p>
+                        </div>
+                      </div>
+                      
+                      <div className="p-3 bg-blue-50 rounded-lg">
+                        <p className="text-sm font-medium text-blue-700">Average Payment Amount</p>
+                        <p className="text-2xl font-bold text-blue-600">
+                          ${(analytics.paymentAnalytics?.averagePaymentAmount || 0).toFixed(2)}
+                        </p>
+                      </div>
+
+                      {analytics.paymentAnalytics?.paymentMethods && analytics.paymentAnalytics.paymentMethods.length > 0 && (
+                        <div className="space-y-2">
+                          <p className="text-sm font-medium text-gray-700">Payment Methods Used</p>
+                          {analytics.paymentAnalytics.paymentMethods.map((method: any, index: number) => (
+                            <div key={index} className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                              <span className="text-sm text-gray-600">{method.method}</span>
+                              <span className="text-sm font-medium">{method.count} payments</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
 
@@ -477,9 +574,19 @@ export default function OwnerDashboard({}: OwnerDashboardProps) {
                       <div key={product.id} className="p-4 border rounded-lg hover:bg-gray-50">
                         <div className="flex items-center justify-between mb-2">
                           <h3 className="font-medium text-gray-900">{product.name}</h3>
-                          <Badge className={product.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
-                            {product.isActive ? 'Active' : 'Inactive'}
-                          </Badge>
+                          <div className="flex items-center space-x-2">
+                            <Badge className={product.isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}>
+                              {product.isActive ? 'Active' : 'Inactive'}
+                            </Badge>
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => handleDeleteProduct(product.id)}
+                              disabled={deleteProductMutation.isPending}
+                            >
+                              {deleteProductMutation.isPending ? "Deleting..." : "Delete"}
+                            </Button>
+                          </div>
                         </div>
                         <p className="text-sm text-gray-600 mb-2">{product.description}</p>
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm text-gray-600">
