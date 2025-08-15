@@ -109,9 +109,9 @@ A **modern, full-stack rental platform** connecting item owners with renters thr
 ### Prerequisites
 - Node.js 18+
 - PostgreSQL
-- Stripe account
+- Razorpay account
 - Cloudinary account
-- SendGrid account *(optional)*
+- SendGrid account 
 
 ### Environment Variables
 Create a `.env` file in the project root:
